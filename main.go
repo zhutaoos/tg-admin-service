@@ -1,13 +1,10 @@
 package main
 
 import (
-	_ "app/internal/callback"
 	"app/internal/global"
 	"app/internal/model"
 	"app/internal/router"
-	"app/tools/beanstalkd/consumer"
-	"app/tools/beanstalkd/producer"
-	confg "app/tools/config"
+	config "app/tools/config"
 	"app/tools/logger"
 	"encoding/binary"
 	"flag"
@@ -18,32 +15,21 @@ import (
 	"time"
 )
 
-const LOGO = `
- ██████╗   ██████╗  ██╗ ███╗   ██╗  ██████╗   ██████╗ 
-██╔════╝  ██╔═══██╗ ██║ ████╗  ██║ ██╔════╝  ██╔═══██╗
-██║  ███╗ ██║   ██║ ██║ ██╔██╗ ██║ ██║  ███╗ ██║   ██║
-██║   ██║ ██║   ██║ ██║ ██║╚██╗██║ ██║   ██║ ██║   ██║
-╚██████╔╝ ╚██████╔╝ ██║ ██║ ╚████║ ╚██████╔╝ ╚██████╔╝
- ╚═════╝   ╚═════╝  ╚═╝ ╚═╝  ╚═══╝  ╚═════╝   ╚═════╝ 
-`
-
 var err error
 
 func main() {
-	fmt.Print(LOGO)
-
 	flag.StringVar(&global.Mode, "mode", "dev", "-mode=prod, -mode=dev") // "dev" or "prod"
 	flag.StringVar(&global.InitDb, "initDb", "false", "-initDb=true, -initDb=false")
 	flag.Parse()
 	time.Local, _ = time.LoadLocation("Asia/Shanghai")
 
-	conf := (&confg.Config{
+	conf := (&config.Config{
 		Path:     "./config",
 		FileName: global.Mode, // dev or prod
 	}).Init()
 
-	global.ServerName = confg.Get[string](conf, "server", "name")
-	global.Version = confg.Get[string](conf, "server", "version")
+	global.ServerName = config.Get[string](conf, "server", "name")
+	global.Version = config.Get[string](conf, "server", "version")
 	pid := os.Getpid()
 	var buf = make([]byte, 4)
 	binary.BigEndian.PutUint32(buf, uint32(pid))
@@ -75,16 +61,16 @@ func main() {
 	logger.Init()
 
 	model.InitDb(&model.DbConf{
-		UserName: confg.Get[string](conf, "mysql", "username"),
-		Password: confg.Get[string](conf, "mysql", "password"),
-		Ip:       confg.Get[string](conf, "mysql", "ip"),
-		Port:     confg.Get[string](conf, "mysql", "port"),
-		DbName:   confg.Get[string](conf, "mysql", "db_name"),
+		UserName: config.Get[string](conf, "mysql", "username"),
+		Password: config.Get[string](conf, "mysql", "password"),
+		Ip:       config.Get[string](conf, "mysql", "ip"),
+		Port:     config.Get[string](conf, "mysql", "port"),
+		DbName:   config.Get[string](conf, "mysql", "db_name"),
 	})
 
 	model.InitRedis(&model.RedisConf{
-		Ip:   confg.Get[string](conf, "redis", "ip"),
-		Port: confg.Get[string](conf, "redis", "port"),
+		Ip:   config.Get[string](conf, "redis", "ip"),
+		Port: config.Get[string](conf, "redis", "port"),
 	})
 
 	if global.InitDb == "true" {
@@ -100,24 +86,6 @@ func main() {
 		logger.System("END INIT TABLE ====================")
 	}
 
-	beanstalkdIp := confg.Get[string](conf, "beanstalkd", "ip")
-	beanstalkdPort := confg.Get[string](conf, "beanstalkd", "port")
-
-	if beanstalkdIp != "" && beanstalkdPort != "" {
-		err = producer.Instance.Init(beanstalkdIp, beanstalkdPort, "common")
-		if err != nil {
-			logger.Error("beanstalkd producer init err:", "err", err)
-			return
-		}
-
-		err = consumer.Instance.Init(beanstalkdIp, beanstalkdPort, []string{"common"})
-		if err != nil {
-			logger.Error("beanstalkd consumer init err:", "err", err)
-			return
-		}
-		go consumer.Instance.ReserveLoop()
-	}
-
-	port := confg.Get[string](conf, "server", "port")
+	port := config.Get[string](conf, "server", "port")
 	router.InitRouter(port)
 }

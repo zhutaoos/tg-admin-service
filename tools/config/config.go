@@ -1,9 +1,10 @@
-package confg
+package config
 
 import (
 	"app/tools/conv"
 	"errors"
 	"fmt"
+
 	"github.com/spf13/viper"
 )
 
@@ -13,8 +14,6 @@ type Config struct {
 	FileName string // 文件名
 	FileType string // 文件类型
 }
-
-//var v = viper.New()
 
 func (c *Config) Init() *Config {
 	if c.Path == "" {

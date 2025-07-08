@@ -7,8 +7,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/redis/go-redis/v9"
 	"time"
+
+	"github.com/redis/go-redis/v9"
 )
 
 type User struct {
@@ -47,17 +48,6 @@ func (user *User) SetUser() {
 		user.Password = tools.Md5(user.Password, UserPwdSalt)
 	}
 	user.SaveCache()
-
-	//_, err := producer.Instance.Push(&beanstalkdMsg.Message{
-	//	C:    beanstalkdMsg.CDefault,
-	//	M:    beanstalkdMsg.MSaveUser,
-	//	Data: user,
-	//}, 0)
-
-	if err != nil {
-		logger.Error("push beanstalkd SaveUser err", "err", err.Error())
-		return
-	}
 }
 
 func (user *User) SaveCache() {
