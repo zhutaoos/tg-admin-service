@@ -1,7 +1,6 @@
 package router
 
 import (
-	"app/internal/global"
 	middleware2 "app/internal/middleware"
 	"app/tools/logger"
 	"fmt"
@@ -19,7 +18,7 @@ type RouteGateway interface {
 func InitRouter(port string) {
 	var err error
 
-	if global.Mode == "dev" {
+	if config.Mode == "dev" {
 		gin.SetMode(gin.DebugMode)
 	} else {
 		gin.SetMode(gin.ReleaseMode)

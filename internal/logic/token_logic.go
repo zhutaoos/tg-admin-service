@@ -39,7 +39,7 @@ func (tl *TokenLogic) GenerateJwt(uid uint, jType jwt.JType, exTime int64) (stri
 	// 删除旧的 key
 	get := model2.RedisClient.Get(context.Background(), uidTokenKey)
 	if get.Val() != "" {
-		model2.RedisClient.Del(context.Background(), get.Val())
+		config.RedisClient.Del(context.Background(), get.Val())
 	}
 
 	tokenModel.CreateToken()

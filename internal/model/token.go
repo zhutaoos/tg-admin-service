@@ -1,6 +1,9 @@
 package model
 
-import "app/tools/jwt"
+import (
+	"app/internal/config"
+	"app/tools/jwt"
+)
 
 type Token struct {
 	*MysqlBaseModel `gorm:"-:all"` // -:all 无读写迁移权限，该字段不在数据库中
@@ -16,12 +19,12 @@ type Token struct {
 }
 
 func (t *Token) CheckToken(token string, jType jwt.JType) *Token {
-	Db().First(t, "token = ? AND type = ?", token, string(jType))
+	config.Db().First(t, "token = ? AND type = ?", token, string(jType))
 	return t
 }
 
 func (t *Token) CreateToken() *Token {
-	Db().Create(&t)
+	config.Db().Create(&t)
 	return t
 }
 
@@ -36,5 +39,5 @@ func (t *Token) DelToken() {
 	if t.Type != "" {
 		where["type"] = t.Type
 	}
-	Db().Where(where).Delete(&t)
+	config.Db().Where(where).Delete(&t)
 }

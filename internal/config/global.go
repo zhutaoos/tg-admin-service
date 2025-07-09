@@ -1,7 +1,7 @@
-package global
+package config
 
-var Mode string
 var ServerName string
+var Version string
+var Mode string
 var InitDb string
 var LocalIp string
-var Version string

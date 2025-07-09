@@ -1,10 +1,10 @@
-package model
+package config
 
 import (
-	"app/internal/global"
 	"app/tools/key_utils"
 	"app/tools/logger"
 	"context"
+
 	"github.com/redis/go-redis/v9"
 )
 
@@ -13,13 +13,21 @@ var RedisClient = &redis.Client{}
 var KeyUtils = &key_utils.KeyUtils{}
 
 type RedisConf struct {
-	Ip   string
-	Port string
+	Ip       string
+	Port     string
+	Username string
+	Password string
+	Db       int
+	MaxTotal int
 }
 
 func InitRedis(c *RedisConf) {
 	o := &redis.Options{
-		Addr: c.Ip + ":" + c.Port,
+		Addr:     c.Ip + ":" + c.Port,
+		Username: c.Username,
+		Password: c.Password,
+		DB:       c.Db,
+		PoolSize: c.MaxTotal,
 	}
 
 	RedisClient = redis.NewClient(o)
@@ -31,5 +39,5 @@ func InitRedis(c *RedisConf) {
 		logger.System("REDIS INIT SUCCESS")
 	}
 
-	KeyUtils.BaseName = global.ServerName
+	KeyUtils.BaseName = ServerName
 }

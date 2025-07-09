@@ -1,14 +1,15 @@
-package model
+package config
 
 import (
 	sysLog "app/tools/logger"
 	"fmt"
+	"os"
+	"time"
+
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 	"gorm.io/gorm/schema"
-	"os"
-	"time"
 )
 
 var db *gorm.DB
@@ -24,7 +25,7 @@ type DbConf struct {
 	DbName   string
 }
 
-func InitDb(c *DbConf) {
+func InitMysql(c *DbConf) {
 	dns := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?charset=utf8mb4&parseTime=True&loc=Local",
 		c.UserName,
 		c.Password,
@@ -43,7 +44,6 @@ func InitDb(c *DbConf) {
 		NamingStrategy: schema.NamingStrategy{
 			// 使用单数表名，启用该选项，此时，`User` 的表名应该是 `user`
 			SingularTable: true,
-			TablePrefix:   "b_", // 表前缀 https://gorm.io/zh_CN/docs/gorm_config.html
 		},
 	})
 

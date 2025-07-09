@@ -1,6 +1,7 @@
 package model
 
 import (
+	"app/internal/config"
 	"app/tools/conv"
 	"app/tools/logger"
 	"fmt"
@@ -61,7 +62,7 @@ func (m *MysqlBaseModel) CreateTable(child BaseModel) {
 		v = v.Elem()
 	}
 	logger.Debug("INIT MYSQL TABLE " + v.String())
-	err := db.Set("gorm:table_options", fmt.Sprintf("ENGINE=%s, COMMENT='%s'", m.GetEngin(), m.GetTableComment())).AutoMigrate(child)
+	err := config.Db().Set("gorm:table_options", fmt.Sprintf("ENGINE=%s, COMMENT='%s'", m.GetEngin(), m.GetTableComment())).AutoMigrate(child)
 	if err != nil {
 		logger.Error("数据表生成失败", "err", err.Error(), "tableName", v.String())
 		return

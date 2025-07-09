@@ -1,7 +1,7 @@
 package middleware
 
 import (
-	"app/internal/global"
+	"app/internal/config"
 	"app/tools/conv"
 	"app/tools/resp"
 	"github.com/gin-gonic/gin"
@@ -17,7 +17,7 @@ func FilterIp(allowIp []string) func(c *gin.Context) {
 
 		ip := c.ClientIP()
 		if ip == "::1" || ip == "localhost" {
-			ip = global.LocalIp
+			ip = config.LocalIp
 		}
 		if k, _ := conv.InSlice(allowIp, ip); k < 0 {
 			(&resp.JsonResp{Code: resp.ReIllegalIp, Message: "illegal IP", Body: map[string]any{"ip": ip}}).Response()
