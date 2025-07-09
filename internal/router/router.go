@@ -1,7 +1,8 @@
 package router
 
 import (
-	middleware2 "app/internal/middleware"
+	"app/internal/config"
+	"app/internal/middleware"
 	"app/tools/logger"
 	"fmt"
 	"io"
@@ -10,10 +11,6 @@ import (
 
 	"github.com/gin-gonic/gin"
 )
-
-type RouteGateway interface {
-	initRoute()
-}
 
 func InitRouter(port string) {
 	var err error
@@ -26,7 +23,7 @@ func InitRouter(port string) {
 
 	r := gin.New()
 
-	r.Use(middleware2.CORSMiddleware()) // 解决跨域
+	r.Use(middleware.CORSMiddleware()) // 解决跨域
 
 	_ = r.SetTrustedProxies([]string{"127.0.0.1"})
 
@@ -52,11 +49,10 @@ func InitRouter(port string) {
 		},
 	}
 	r.Use(gin.LoggerWithConfig(c))
+	r.Use(middleware.RespMiddleware()) // 响应中间件
 
-	r.Use(middleware2.RespMiddleware()) // 响应中间件
-	rr := r.Group(global.Version)
-	AdminRoute := AdminRoute{group: rr.Group("api/admin")}
-	IndexRoute := IndexRoute{group: rr.Group("api/index")}
+	AdminRoute := AdminRoute{group: r.Group("api/admin")}
+	IndexRoute := IndexRoute{group: r.Group("api/index")}
 	AdminRoute.initRoute()
 	IndexRoute.initRoute()
 

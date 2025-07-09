@@ -16,7 +16,6 @@ func init() {
 // LoadUser 根据 uid 搜索用户
 func (u UserLogic) LoadUser(uid uint) *model2.User {
 	userModel := &model2.User{Id: uid}
-	userModel.GetCache()
 	if userModel.Id == 0 {
 		userModel.GetUserInfo()
 	}

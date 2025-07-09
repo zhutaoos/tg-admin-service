@@ -3,6 +3,7 @@ package router
 import (
 	adminApi "app/internal/controller/admin"
 	"app/internal/middleware"
+
 	"github.com/gin-gonic/gin"
 )
 
@@ -12,7 +13,6 @@ type AdminRoute struct {
 
 func (r *AdminRoute) initRoute() {
 	r.group.POST("login", adminApi.AdminLogin)
-	r.group.GET("getArticleDetail", adminApi.GetArticleDetail)
 	r.group.POST("setArticle", middleware.CheckJwt(), adminApi.SetArticle)
 	r.group.POST("delArticle", middleware.CheckJwt(), adminApi.DelArticle)
 	r.group.GET("articleList", middleware.CheckJwt(), adminApi.ArticleList)

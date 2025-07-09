@@ -1,6 +1,7 @@
 package logic
 
 import (
+	"app/internal/config"
 	model2 "app/internal/model"
 	"app/tools/conv"
 	"app/tools/jwt"
@@ -33,11 +34,11 @@ func (tl *TokenLogic) GenerateJwt(uid uint, jType jwt.JType, exTime int64) (stri
 	tokenModel.DeviceType = userJwt.DeviceType
 	tokenModel.DelToken() // 删除这个用户的 token
 
-	cacheKey := model2.KeyUtils.GetTokenKey(userJwt.Token)
-	uidTokenKey := model2.KeyUtils.GetUidToken(int(uid))
+	cacheKey := config.KeyUtils.GetTokenKey(userJwt.Token)
+	uidTokenKey := config.KeyUtils.GetUidToken(int(uid))
 
 	// 删除旧的 key
-	get := model2.RedisClient.Get(context.Background(), uidTokenKey)
+	get := config.RedisClient.Get(context.Background(), uidTokenKey)
 	if get.Val() != "" {
 		config.RedisClient.Del(context.Background(), get.Val())
 	}
@@ -46,16 +47,16 @@ func (tl *TokenLogic) GenerateJwt(uid uint, jType jwt.JType, exTime int64) (stri
 
 	m := conv.Struct2Map(*userJwt, true)
 	m["type"], _ = conv.Conv[string](m["type"])
-	_, err := model2.RedisClient.HMSet(context.Background(), cacheKey, m).Result()
+	_, err := config.RedisClient.HMSet(context.Background(), cacheKey, m).Result()
 	if err != nil {
 		(&resp.JsonResp{Code: resp.ReFail, Message: "jwt 缓存失败", Body: nil}).Response()
 	}
-	_, err = model2.RedisClient.Set(context.Background(), uidTokenKey, cacheKey, -1).Result()
+	_, err = config.RedisClient.Set(context.Background(), uidTokenKey, cacheKey, -1).Result()
 	if err != nil {
 		(&resp.JsonResp{Code: resp.ReFail, Message: "uidTokenKey 缓存失败", Body: nil}).Response()
 	}
 	if exTime > 0 {
-		model2.RedisClient.Expire(context.Background(), cacheKey, time.Duration(exTime)*time.Second)
+		config.RedisClient.Expire(context.Background(), cacheKey, time.Duration(exTime)*time.Second)
 	}
 	return j, userJwt
 }
@@ -66,8 +67,8 @@ func (tl *TokenLogic) CheckJwt(j string) (*jwt.UserJwt, error) {
 		return nil, err
 	}
 
-	cacheKey := model2.KeyUtils.GetTokenKey(userJwt.Token)
-	r, err := model2.RedisClient.HGetAll(context.Background(), cacheKey).Result()
+	cacheKey := config.KeyUtils.GetTokenKey(userJwt.Token)
+	r, err := config.RedisClient.HGetAll(context.Background(), cacheKey).Result()
 	if err != nil {
 		return nil, err
 	}
