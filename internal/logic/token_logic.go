@@ -5,6 +5,7 @@ import (
 	"app/internal/model"
 	"app/tools/conv"
 	"app/tools/jwt"
+	"app/tools/logger"
 	"app/tools/resp"
 	"context"
 	"encoding/json"
@@ -44,8 +45,9 @@ func (tl *TokenLogic) GenerateJwt(uid uint, exTime int64) (string, *jwt.UserJwt)
 	tokenModel.CreateToken()
 
 	var m, err = json.Marshal(userJwt)
-	_, err = config.Redis.HMSet(context.Background(), tokenKey, m).Result()
+	_, err = config.Redis.Set(context.Background(), tokenKey, m, -1).Result()
 	if err != nil {
+		logger.Error("jwt 缓存失败", err)
 		(&resp.JsonResp{Code: resp.ReFail, Msg: "jwt 缓存失败", Data: nil}).Response()
 	}
 	_, err = config.Redis.Set(context.Background(), uidTokenKey, tokenKey, -1).Result()

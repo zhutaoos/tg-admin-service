@@ -67,8 +67,12 @@ func main() {
 	})
 
 	config.InitRedis(&config.RedisConf{
-		Ip:   config.Get[string](conf, "redis", "ip"),
-		Port: config.Get[string](conf, "redis", "port"),
+		Ip:       config.Get[string](conf, "redis", "ip"),
+		Port:     config.Get[string](conf, "redis", "port"),
+		Username: config.Get[string](conf, "redis", "username"),
+		Password: config.Get[string](conf, "redis", "password"),
+		Db:       config.Get[int](conf, "redis", "db"),
+		MaxTotal: config.Get[int](conf, "redis", "max_total"),
 	})
 
 	if config.InitDb == "true" {
