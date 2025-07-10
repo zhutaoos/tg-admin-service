@@ -2,13 +2,14 @@ package resp
 
 import "github.com/gin-gonic/gin"
 
-type Code uint
+type Code int
 
 const ReSuccess Code = 200
 const ReFail Code = 400
 const ReAuthFail Code = 401
 const ReIllegalIp Code = 402
 const ReError Code = 500
+const NeedLoginError Code = -1
 
 type Response interface {
 	GetCode() Code
@@ -21,9 +22,13 @@ type Response interface {
 
 type JsonResp struct {
 	Code     Code
-	Message  string
-	Body     any
+	Msg      string
+	Data     any
 	httpCode int
+}
+
+func NeedLogin() *JsonResp {
+	return &JsonResp{Code: NeedLoginError, Msg: "请登录"}
 }
 
 func (j *JsonResp) GetCode() Code {
@@ -31,11 +36,11 @@ func (j *JsonResp) GetCode() Code {
 }
 
 func (j *JsonResp) GetBody() any {
-	return j.Body
+	return j.Data
 }
 
 func (j *JsonResp) GetMsg() string {
-	return j.Message
+	return j.Msg
 }
 
 func (j *JsonResp) GetHttpCode() int {

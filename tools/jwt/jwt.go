@@ -3,46 +3,34 @@ package jwt
 import (
 	sysLog "app/tools/logger"
 	"app/tools/random"
-	"github.com/golang-jwt/jwt"
 	"time"
+
+	"github.com/golang-jwt/jwt"
 )
 
-type JType string
-
 const (
-	AdminJwtType   JType = "admin_template"
-	IndexJwtType   JType = "index_template"
-	Key                  = "admin123456!"
-	DefaultExpTime       = 30 * 86400 // jwt 默认过期时间（秒）
+	Key            = "admin123456!"
+	DefaultExpTime = 7 * 86400 // jwt 默认过期时间（秒）
 )
 
 type UserJwt struct {
-	Uid                uint   `json:"uid"`
-	Type               JType  `json:"type"`
-	Token              string `json:"token"`
-	ExpireTime         int64  `json:"expire_time"`
-	DeviceId           string `json:"device_id"`
-	DeviceType         uint8  `json:"device_type"`
-	jwt.StandardClaims        // 必须要实现这个接口
+	UserId     uint   `json:"user_id"`
+	Token      string `json:"token"`
+	ExpireTime int64  `json:"expire_time"`
+	jwt.StandardClaims
 }
 
 // CreateJwt 生成 jwt
-func CreateJwt(id uint, jwtType JType, expireTime int64) (string, *UserJwt) {
-	if expireTime < 0 {
-		expireTime = time.Now().Unix() + (60 * 60 * 24 * 30)
-	} else if expireTime == 0 {
+func CreateJwt(id uint, expireTime int64) (string, *UserJwt) {
+	if expireTime <= 0 {
 		expireTime = time.Now().Unix() + DefaultExpTime
-	} else {
-		expireTime = time.Now().Unix() + expireTime
 	}
+	expireTime = time.Now().Unix() + expireTime
 
 	userJwt := UserJwt{
-		Uid:            id,
-		Type:           jwtType,
+		UserId:         id,
 		Token:          random.Str(0),
 		ExpireTime:     expireTime,
-		DeviceId:       "",
-		DeviceType:     0,
 		StandardClaims: jwt.StandardClaims{ExpiresAt: expireTime},
 	}
 

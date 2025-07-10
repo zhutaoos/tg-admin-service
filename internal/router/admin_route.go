@@ -12,19 +12,16 @@ type AdminRoute struct {
 }
 
 func (r *AdminRoute) initRoute() {
+	// 当前实现：每个路由单独配置JWT中间件
 	r.group.POST("login", adminApi.AdminLogin)
-	r.group.POST("setArticle", middleware.CheckJwt(), adminApi.SetArticle)
-	r.group.POST("delArticle", middleware.CheckJwt(), adminApi.DelArticle)
-	r.group.GET("articleList", middleware.CheckJwt(), adminApi.ArticleList)
-	r.group.GET("getAdminInfo", middleware.CheckJwt(), adminApi.GetAdminInfo)
-	r.group.GET("getCateList", middleware.CheckJwt(), adminApi.GetCateList)
-	r.group.POST("setAdminInfo", middleware.CheckJwt(), adminApi.SetAdminInfo)
-	r.group.GET("getRoles", middleware.CheckJwt(), adminApi.GetRoles)
-	r.group.POST("setRoles", middleware.CheckJwt(), adminApi.SetRoles)
-	r.group.POST("delRoles", middleware.CheckJwt(), adminApi.DelRoles)
-	r.group.GET("getAdminList", middleware.CheckJwt(), adminApi.GetAdminList)
-	r.group.GET("delAdmin", middleware.CheckJwt(), adminApi.DelAdmin)
-	r.group.GET("setRolesGroup", middleware.CheckJwt(), adminApi.SetRolesGroup)
-	r.group.GET("getRolesGroupList", middleware.CheckJwt(), adminApi.GetRolesGroupList)
-	r.group.GET("delRolesGroup", middleware.CheckJwt(), adminApi.DelRolesGroup)
+	r.group.POST("getAdminList", middleware.CheckJwt(), adminApi.GetAdminList)
+	r.group.POST("delAdmin", middleware.CheckJwt(), adminApi.DelAdmin)
+
+	// 使用全局JWT中间件后的简化版本：
+	// （需要在 router.go 中启用 JwtMiddlewareWithWhitelist 全局中间件）
+	/*
+		r.group.POST("login", adminApi.AdminLogin)           // 在白名单中，自动跳过鉴权
+		r.group.POST("getAdminList", adminApi.GetAdminList)  // 自动进行JWT鉴权
+		r.group.POST("delAdmin", adminApi.DelAdmin)          // 自动进行JWT鉴权
+	*/
 }

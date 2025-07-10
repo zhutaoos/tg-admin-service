@@ -4,19 +4,15 @@ import (
 	"strconv"
 )
 
-type KeyUtils struct {
-	BaseName string
-}
-
-func (k *KeyUtils) GetUserKey(uid uint) string {
-	return k.BaseName + ":user:" + strconv.Itoa(int(uid))
+func GetUserKey(uid uint) string {
+	return ":user:" + strconv.Itoa(int(uid))
 }
 
 // GetTokenKey 存放 userJwt struct
-func (k *KeyUtils) GetTokenKey(token string) string {
-	return k.BaseName + ":token:" + token
+func GetTokenKey(token string) string {
+	return ":token:" + token
 }
 
-func (k *KeyUtils) GetUidToken(uid int) string {
-	return k.BaseName + ":uid-token:" + strconv.Itoa(uid)
+func GetUidToken(uid int) string {
+	return ":uid-token:" + strconv.Itoa(uid)
 }

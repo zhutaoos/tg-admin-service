@@ -2,13 +2,15 @@ package logic
 
 import (
 	"app/internal/config"
-	model2 "app/internal/model"
+	"app/internal/model"
 	"app/tools/conv"
 	"app/tools/jwt"
 	"app/tools/resp"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 	"time"
 )
 
@@ -21,42 +23,38 @@ func init() {
 	TokenLogicInstance = &TokenLogic{}
 }
 
-func (tl *TokenLogic) GenerateJwt(uid uint, jType jwt.JType, exTime int64) (string, *jwt.UserJwt) {
+func (tl *TokenLogic) GenerateJwt(uid uint, exTime int64) (string, *jwt.UserJwt) {
+	j, userJwt := jwt.CreateJwt(uid, exTime)
 
-	j, userJwt := jwt.CreateJwt(uid, jType, exTime)
-
-	tokenModel := new(model2.Token)
-	tokenModel.Uid = userJwt.Uid
+	tokenModel := new(model.Token)
+	tokenModel.UserId = userJwt.UserId
 	tokenModel.Token = userJwt.Token
 	tokenModel.ExpireTime = userJwt.ExpireTime
-	tokenModel.Type = string(userJwt.Type)
-	tokenModel.DeviceId = userJwt.DeviceId
-	tokenModel.DeviceType = userJwt.DeviceType
 	tokenModel.DelToken() // 删除这个用户的 token
 
-	cacheKey := config.KeyUtils.GetTokenKey(userJwt.Token)
-	uidTokenKey := config.KeyUtils.GetUidToken(int(uid))
+	tokenKey := GetTokenKey(userJwt.Token)
+	uidTokenKey := GetUidToken(int(uid))
 
 	// 删除旧的 key
-	get := config.RedisClient.Get(context.Background(), uidTokenKey)
+	get := config.Redis.Get(context.Background(), uidTokenKey)
 	if get.Val() != "" {
-		config.RedisClient.Del(context.Background(), get.Val())
+		config.Redis.Del(context.Background(), get.Val())
 	}
 
 	tokenModel.CreateToken()
 
-	m := conv.Struct2Map(*userJwt, true)
-	m["type"], _ = conv.Conv[string](m["type"])
-	_, err := config.RedisClient.HMSet(context.Background(), cacheKey, m).Result()
+	var m, err = json.Marshal(userJwt)
+	_, err = config.Redis.HMSet(context.Background(), tokenKey, m).Result()
 	if err != nil {
-		(&resp.JsonResp{Code: resp.ReFail, Message: "jwt 缓存失败", Body: nil}).Response()
+		(&resp.JsonResp{Code: resp.ReFail, Msg: "jwt 缓存失败", Data: nil}).Response()
 	}
-	_, err = config.RedisClient.Set(context.Background(), uidTokenKey, cacheKey, -1).Result()
+	_, err = config.Redis.Set(context.Background(), uidTokenKey, tokenKey, -1).Result()
 	if err != nil {
-		(&resp.JsonResp{Code: resp.ReFail, Message: "uidTokenKey 缓存失败", Body: nil}).Response()
+		(&resp.JsonResp{Code: resp.ReFail, Msg: "uidTokenKey 缓存失败", Data: nil}).Response()
 	}
 	if exTime > 0 {
-		config.RedisClient.Expire(context.Background(), cacheKey, time.Duration(exTime)*time.Second)
+		config.Redis.Expire(context.Background(), tokenKey, time.Duration(exTime)*time.Second)
+		config.Redis.Expire(context.Background(), uidTokenKey, time.Duration(exTime)*time.Second)
 	}
 	return j, userJwt
 }
@@ -67,8 +65,8 @@ func (tl *TokenLogic) CheckJwt(j string) (*jwt.UserJwt, error) {
 		return nil, err
 	}
 
-	cacheKey := config.KeyUtils.GetTokenKey(userJwt.Token)
-	r, err := config.RedisClient.HGetAll(context.Background(), cacheKey).Result()
+	cacheKey := GetTokenKey(userJwt.Token)
+	r, err := config.Redis.HGetAll(context.Background(), cacheKey).Result()
 	if err != nil {
 		return nil, err
 	}
@@ -86,7 +84,16 @@ func (tl *TokenLogic) CheckJwt(j string) (*jwt.UserJwt, error) {
 	}
 
 	if userJwt.ExpireTime < time.Now().Unix() {
-		(&resp.JsonResp{Code: resp.ReFail, Message: "token 过期", Body: nil}).Response()
+		(&resp.JsonResp{Code: resp.ReFail, Msg: "token 过期", Data: nil}).Response()
 	}
 	return userJwt, nil
+}
+
+// GetTokenKey 存放 userJwt struct
+func GetTokenKey(token string) string {
+	return "token:" + token
+}
+
+func GetUidToken(uid int) string {
+	return "uid-token:" + strconv.Itoa(uid)
 }

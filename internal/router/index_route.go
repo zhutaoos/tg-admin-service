@@ -9,5 +9,5 @@ type IndexRoute struct {
 }
 
 func (r *IndexRoute) initRoute() {
-	r.group.POST("login", index_api.Login) // 登陆
+	// /r.group.POST("login", index_api.Login) // 登陆
 }

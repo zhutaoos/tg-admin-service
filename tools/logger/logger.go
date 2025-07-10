@@ -111,7 +111,6 @@ func Trace() string {
 }
 
 func Debug(msg string, append ...any) {
-	fmt.Println("[GOINGO-DEBUG]", msg, append)
 	if infoFileHandel != nil {
 		logHandel := slog.New(slog.NewTextHandler(infoFileHandel, nil))
 		slog.SetDefault(logHandel)
@@ -120,7 +119,6 @@ func Debug(msg string, append ...any) {
 }
 
 func System(msg string, append ...any) {
-	fmt.Println("[GOINGO-SYSTEM]", msg, append)
 	logHandel := slog.New(slog.NewTextHandler(systemFileHandel, nil))
 	slog.SetDefault(logHandel)
 	slog.Info(msg, append...)
@@ -128,8 +126,6 @@ func System(msg string, append ...any) {
 
 func Error(msg string, appends ...any) {
 	t := Trace()
-	fmt.Println(t)
-	fmt.Println("[GOINGO-ERR]", msg, appends)
 	if errFileHandel != nil {
 		logHandel := slog.New(slog.NewTextHandler(errFileHandel, nil))
 		slog.SetDefault(logHandel)

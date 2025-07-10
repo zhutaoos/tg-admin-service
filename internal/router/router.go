@@ -51,6 +51,12 @@ func InitRouter(port string) {
 	r.Use(gin.LoggerWithConfig(c))
 	r.Use(middleware.RespMiddleware()) // 响应中间件
 
+	whitelist := []string{
+		"/api/admin/login", // 管理员登录
+		"/api/health",      // 健康检查
+	}
+	r.Use(middleware.JwtMiddlewareWithWhitelist(whitelist))
+
 	AdminRoute := AdminRoute{group: r.Group("api/admin")}
 	IndexRoute := IndexRoute{group: r.Group("api/index")}
 	AdminRoute.initRoute()
