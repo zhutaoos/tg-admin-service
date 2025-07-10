@@ -42,3 +42,18 @@ func AdminLogin(content *gin.Context) {
 	data["user"] = admin
 	(&resp.JsonResp{Code: resp.ReSuccess, Msg: "登陆成功", Data: data}).Response()
 }
+
+func InitPwd(content *gin.Context) {
+	password := content.PostForm("password")
+
+	if password == "" {
+		(&resp.JsonResp{Code: resp.ReFail, Msg: "请输入密码"}).Response()
+	}
+
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		(&resp.JsonResp{Code: resp.ReFail, Msg: "密码错误", Data: nil}).Response()
+	}
+
+	(&resp.JsonResp{Code: resp.ReSuccess, Msg: "密码初始化成功", Data: string(hashedPassword)}).Response()
+}

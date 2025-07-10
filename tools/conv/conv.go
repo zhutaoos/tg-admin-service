@@ -1,17 +1,17 @@
 package conv
 
 import (
-	"app/tools/jwt"
 	"app/tools/logger"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/gin-gonic/gin"
 	"html/template"
 	"reflect"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/gin-gonic/gin"
 )
 
 type BuiltinT interface {
@@ -966,8 +966,6 @@ func ToStringE(i any) (string, error) {
 		return s.String(), nil
 	case error:
 		return s.Error(), nil
-	case jwt.JType:
-		return string(s), nil
 	default:
 		return "", fmt.Errorf("unable to cast %#v of type %T to string", i, i)
 	}

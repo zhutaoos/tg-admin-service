@@ -79,7 +79,7 @@ func (tl *TokenLogic) CheckJwt(j string) (*jwt.UserJwt, error) {
 	fmt.Println(r)
 	fmt.Println(userJwt)
 	fmt.Println(uid)
-	if uid != userJwt.Uid || r["token"] != userJwt.Token || r["type"] != string(userJwt.Type) {
+	if uid != userJwt.UserId || r["token"] != userJwt.Token {
 		return nil, errors.New("账户已经在其他终端上登录[1]")
 	}
 

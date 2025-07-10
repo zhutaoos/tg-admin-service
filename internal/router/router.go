@@ -52,8 +52,9 @@ func InitRouter(port string) {
 	r.Use(middleware.RespMiddleware()) // 响应中间件
 
 	whitelist := []string{
-		"/api/admin/login", // 管理员登录
-		"/api/health",      // 健康检查
+		"/api/admin/login",   // 管理员登录
+		"/api/admin/initPwd", // 初始化密码
+		"/api/health",        // 健康检查
 	}
 	r.Use(middleware.JwtMiddlewareWithWhitelist(whitelist))
 

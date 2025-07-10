@@ -28,7 +28,6 @@ func main() {
 	}).Init()
 
 	config.ServerName = config.Get[string](conf, "server", "name")
-	config.Version = config.Get[string](conf, "server", "version")
 	pid := os.Getpid()
 	var buf = make([]byte, 4)
 	binary.BigEndian.PutUint32(buf, uint32(pid))
