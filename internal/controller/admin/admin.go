@@ -61,3 +61,7 @@ func InitPwd(content *gin.Context) {
 
 	(&resp.JsonResp{Code: resp.ReSuccess, Msg: "密码初始化成功", Data: string(hashedPassword)}).Response()
 }
+
+func Profile(content *gin.Context) {
+	(&resp.JsonResp{Code: resp.ReSuccess, Msg: "获取用户信息成功", Data: nil}).Response()
+}
