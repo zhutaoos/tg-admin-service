@@ -60,8 +60,10 @@ func InitRouter(port string) {
 
 	AdminRoute := AdminRoute{group: r.Group("api/admin")}
 	IndexRoute := IndexRoute{group: r.Group("api/index")}
+	UserRoute := UserRoute{group: r.Group("api/user")}
 	AdminRoute.initRoute()
 	IndexRoute.initRoute()
+	UserRoute.initRoute()
 
 	err = r.Run(":" + port)
 	if err != nil {
