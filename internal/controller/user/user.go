@@ -17,10 +17,12 @@ func UserList(content *gin.Context) {
 		(&resp.JsonResp{Code: resp.ReFail, Msg: "参数缺失"}).Response()
 	}
 
-	admin := &model.Admin{
-		Account: req.Username,
+	admin := &model.User{
+		Nickname: req.Nickname,
+		Status:   req.Status,
 	}
-	admin = admin.GetAdmin()
+
+	admin = admin.GetList(req)
 
 	// 2. 检查用户是否存在
 	if admin.Id <= 0 {
