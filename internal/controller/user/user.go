@@ -1,47 +1,74 @@
 package admin_api
 
 import (
-	"app/internal/logic"
-	"app/internal/model"
 	"app/internal/request"
+	"app/internal/service"
 	"app/tools/resp"
+	"time"
 
 	"github.com/gin-gonic/gin"
-	"golang.org/x/crypto/bcrypt"
 )
 
+// UserController 用户控制器
+type UserController struct {
+	userService service.UserService
+}
+
+// NewUserController 创建用户控制器实例
+func NewUserController(userService service.UserService) *UserController {
+	return &UserController{
+		userService: userService,
+	}
+}
+
 // UserList 用户列表
-func UserList(content *gin.Context) {
+func (uc *UserController) UserList(ctx *gin.Context) {
 	var req request.UserSearchRequest
-	if err := content.ShouldBind(&req); err != nil {
+	if err := ctx.ShouldBind(&req); err != nil {
 		(&resp.JsonResp{Code: resp.ReFail, Msg: "参数缺失"}).Response()
 	}
 
-	admin := &model.User{
-		Nickname: req.Nickname,
-		Status:   req.Status,
-	}
-
-	admin = admin.GetList(req)
-
-	// 2. 检查用户是否存在
-	if admin.Id <= 0 {
-		(&resp.JsonResp{Code: resp.ReFail, Msg: "账号不存在", Data: nil}).Response()
-	}
-
-	// 3. 使用 bcrypt 比较密码（重要！）
-	err := bcrypt.CompareHashAndPassword([]byte(admin.Password), []byte(req.Password))
+	// 调用业务层获取用户列表
+	users, total, err := uc.userService.UserList(req)
 	if err != nil {
-		(&resp.JsonResp{Code: resp.ReFail, Msg: "密码错误", Data: nil}).Response()
+		(&resp.JsonResp{Code: resp.ReError, Msg: "查询用户列表失败: " + err.Error()}).Response()
 	}
 
-	// 4. 密码正确，生成JWT令牌
-	data := make(map[string]interface{})
+	// 处理时间格式化
+	for i := range users {
+		if users[i].CreateTime > 0 {
+			users[i].CreateTimeStr = time.Unix(users[i].CreateTime, 0).Format("2006-01-02 15:04:05")
+		}
+	}
 
-	j, userJwt := logic.TokenLogicInstance.GenerateJwt(admin.Id, 0)
-	userJwt.Token = ""
-	data["token"] = j
-	data["token_info"] = userJwt
-	data["user"] = admin
-	(&resp.JsonResp{Code: resp.ReSuccess, Msg: "登陆成功", Data: data}).Response()
+	// 构建响应数据
+	data := map[string]interface{}{
+		"list":  users,
+		"total": total,
+		"page":  req.Page,
+		"limit": req.Limit,
+		"pages": (total + int64(req.Limit) - 1) / int64(req.Limit), // 总页数
+	}
+
+	(&resp.JsonResp{Code: resp.ReSuccess, Msg: "获取用户列表成功", Data: data}).Response()
+}
+
+// GetUserInfo 获取用户信息
+func (uc *UserController) GetUserInfo(ctx *gin.Context) {
+	userId := ctx.Param("id")
+	if userId == "" {
+		(&resp.JsonResp{Code: resp.ReFail, Msg: "用户ID不能为空"}).Response()
+	}
+
+	user, err := uc.userService.LoadUser(userId)
+	if err != nil {
+		(&resp.JsonResp{Code: resp.ReFail, Msg: "用户不存在"}).Response()
+	}
+
+	// 格式化时间
+	if user.CreateTime > 0 {
+		user.CreateTimeStr = time.Unix(user.CreateTime, 0).Format("2006-01-02 15:04:05")
+	}
+
+	(&resp.JsonResp{Code: resp.ReSuccess, Msg: "获取用户信息成功", Data: user}).Response()
 }

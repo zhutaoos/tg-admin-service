@@ -1,52 +1,53 @@
 package admin_api
 
 import (
-	"app/internal/logic"
-	"app/internal/model"
 	"app/internal/request"
+	"app/internal/service"
 	"app/tools/resp"
 
 	"github.com/gin-gonic/gin"
 	"golang.org/x/crypto/bcrypt"
 )
 
+// AdminController 管理员控制器
+type AdminController struct {
+	adminService service.AdminService
+}
+
+// NewAdminController 创建管理员控制器实例
+func NewAdminController(adminService service.AdminService) *AdminController {
+	return &AdminController{
+		adminService: adminService,
+	}
+}
+
 // AdminLogin 管理员登录
-func AdminLogin(content *gin.Context) {
+func (ac *AdminController) AdminLogin(ctx *gin.Context) {
 	var req request.AdminLoginRequest
-	if err := content.ShouldBind(&req); err != nil {
+	if err := ctx.ShouldBind(&req); err != nil {
 		(&resp.JsonResp{Code: resp.ReFail, Msg: "参数缺失"}).Response()
 	}
 
-	admin := &model.Admin{
-		Account: req.Username,
-	}
-	admin = admin.GetAdmin()
-
-	// 2. 检查用户是否存在
-	if admin.Id <= 0 {
-		(&resp.JsonResp{Code: resp.ReFail, Msg: "账号不存在", Data: nil}).Response()
-	}
-
-	// 3. 使用 bcrypt 比较密码（重要！）
-	err := bcrypt.CompareHashAndPassword([]byte(admin.Password), []byte(req.Password))
+	// 调用业务层处理登录
+	result, err := ac.adminService.Login(req)
 	if err != nil {
-		(&resp.JsonResp{Code: resp.ReFail, Msg: "密码错误", Data: nil}).Response()
+		(&resp.JsonResp{Code: resp.ReFail, Msg: err.Error()}).Response()
 	}
 
-	// 4. 密码正确，生成JWT令牌
-	data := make(map[string]interface{})
+	// 组装响应数据
+	data := map[string]interface{}{
+		"token":      result.Token,
+		"token_info": result.TokenInfo,
+		"user":       result.User,
+	}
 
-	j, userJwt := logic.TokenLogicInstance.GenerateJwt(admin.Id, 0)
-	userJwt.Token = ""
-	data["token"] = j
-	data["token_info"] = userJwt
-	data["user"] = admin
-	(&resp.JsonResp{Code: resp.ReSuccess, Msg: "登陆成功", Data: data}).Response()
+	(&resp.JsonResp{Code: resp.ReSuccess, Msg: "登录成功", Data: data}).Response()
 }
 
-func InitPwd(content *gin.Context) {
+// InitPwd 初始化密码
+func (ac *AdminController) InitPwd(ctx *gin.Context) {
 	var req request.InitPwdRequest
-	if err := content.ShouldBind(&req); err != nil {
+	if err := ctx.ShouldBind(&req); err != nil {
 		(&resp.JsonResp{Code: resp.ReFail, Msg: "请输入密码"}).Response()
 	}
 
@@ -54,14 +55,18 @@ func InitPwd(content *gin.Context) {
 		(&resp.JsonResp{Code: resp.ReFail, Msg: "请输入密码"}).Response()
 	}
 
+	// 生成密码哈希
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
 	if err != nil {
-		(&resp.JsonResp{Code: resp.ReFail, Msg: "密码错误", Data: nil}).Response()
+		(&resp.JsonResp{Code: resp.ReFail, Msg: "密码加密失败"}).Response()
 	}
 
 	(&resp.JsonResp{Code: resp.ReSuccess, Msg: "密码初始化成功", Data: string(hashedPassword)}).Response()
 }
 
-func Profile(content *gin.Context) {
+// Profile 获取用户信息
+func (ac *AdminController) Profile(ctx *gin.Context) {
+	// 这里应该从JWT中获取用户ID，暂时返回成功
+	// TODO: 实现从JWT中获取用户信息的逻辑
 	(&resp.JsonResp{Code: resp.ReSuccess, Msg: "获取用户信息成功", Data: nil}).Response()
 }

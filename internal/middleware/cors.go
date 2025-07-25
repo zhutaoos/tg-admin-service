@@ -1,7 +1,6 @@
 package middleware
 
 import (
-	logic2 "app/internal/logic"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -21,7 +20,8 @@ func CORSMiddleware() gin.HandlerFunc {
 		if c.Request.Method == http.MethodOptions {
 			c.AbortWithStatus(200)
 		} else {
-			logic2.ContextLogicInstance.SetContext(c)
+			// NOTE: ContextLogic已移除，Context应该通过参数传递而非全局存储
+			// 在并发环境下，全局Context存储是不安全的
 			c.Next()
 		}
 	}

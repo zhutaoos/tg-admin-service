@@ -1,0 +1,87 @@
+进程 PID: 70691 
+[Fx] PROVIDE	fx.Lifecycle <= go.uber.org/fx.New.func1()
+[Fx] PROVIDE	fx.Shutdowner <= go.uber.org/fx.(*App).shutdowner-fm()
+[Fx] PROVIDE	fx.DotGraph <= go.uber.org/fx.(*App).dotGraph-fm()
+[Fx] PROVIDE	string <= main.main.func1()
+[Fx] PROVIDE	string[name = "mode"] <= fx.Annotated{Name: "mode", Target: main.main.func2()}
+[Fx] PROVIDE	string[name = "initDb"] <= fx.Annotated{Name: "initDb", Target: main.main.func3()}
+[Fx] PROVIDE	*config.Config <= app/internal/provider.NewConfig()
+[Fx] PROVIDE	*config.DbConf <= app/internal/provider.NewDatabaseConfig()
+[Fx] PROVIDE	*config.RedisConf <= app/internal/provider.NewRedisConfig()
+[Fx] PROVIDE	*provider.ConfigWatcher <= app/internal/provider.NewConfigWatcher()
+[Fx] PROVIDE	*gorm.DB <= app/internal/provider.NewDatabase()
+[Fx] PROVIDE	*redis.Client <= app/internal/provider.NewRedis()
+[Fx] PROVIDE	interfaces.UserRepositoryInterface <= app/internal/provider.NewUserRepository()
+[Fx] PROVIDE	interfaces.AdminRepositoryInterface <= app/internal/provider.NewAdminRepository()
+[Fx] PROVIDE	interfaces.TokenRepositoryInterface <= app/internal/provider.NewTokenRepository()
+[Fx] PROVIDE	interfaces.UserServiceInterface <= app/internal/provider.NewUserService()
+[Fx] PROVIDE	interfaces.AdminServiceInterface <= app/internal/provider.NewAdminService()
+[Fx] PROVIDE	interfaces.TokenLogicInterface <= app/internal/provider.NewTokenLogic()
+[Fx] PROVIDE	*admin_api.AdminController <= app/internal/provider.NewAdminController()
+[Fx] PROVIDE	*admin_api.UserController <= app/internal/provider.NewUserController()
+[Fx] PROVIDE	*router.AdminRoute <= app/internal/provider.NewAdminRoute()
+[Fx] PROVIDE	*router.UserRoute <= app/internal/provider.NewUserRoute()
+[Fx] PROVIDE	*router.IndexRoute <= app/internal/provider.NewIndexRoute()
+[Fx] PROVIDE	*router.Router <= app/internal/provider.NewRouter()
+[Fx] INVOKE		main.runApplication()
+[Fx] BEFORE RUN	provide: go.uber.org/fx.New.func1()
+[Fx] RUN	provide: go.uber.org/fx.New.func1() in 23.291µs
+[Fx] BEFORE RUN	provide: fx.Annotated{Name: "mode", Target: main.main.func2()}
+[Fx] RUN	provide: fx.Annotated{Name: "mode", Target: main.main.func2()} in 2.5µs
+[Fx] BEFORE RUN	provide: fx.Annotated{Name: "initDb", Target: main.main.func3()}
+[Fx] RUN	provide: fx.Annotated{Name: "initDb", Target: main.main.func3()} in 1.084µs
+[Fx] BEFORE RUN	provide: app/internal/provider.NewConfig()
+[Fx] RUN	provide: app/internal/provider.NewConfig() in 397.5µs
+[Fx] BEFORE RUN	provide: app/internal/provider.NewDatabaseConfig()
+[Fx] RUN	provide: app/internal/provider.NewDatabaseConfig() in 13.5µs
+[Fx] BEFORE RUN	provide: app/internal/provider.NewDatabase()
+[Fx] RUN	provide: app/internal/provider.NewDatabase() in 157.486625ms
+[Fx] BEFORE RUN	provide: app/internal/provider.NewAdminRepository()
+[Fx] RUN	provide: app/internal/provider.NewAdminRepository() in 22.208µs
+[Fx] BEFORE RUN	provide: app/internal/provider.NewRedisConfig()
+[Fx] RUN	provide: app/internal/provider.NewRedisConfig() in 66.084µs
+[Fx] BEFORE RUN	provide: app/internal/provider.NewRedis()
+[Fx] RUN	provide: app/internal/provider.NewRedis() in 236.878041ms
+[Fx] BEFORE RUN	provide: app/internal/provider.NewTokenRepository()
+[Fx] RUN	provide: app/internal/provider.NewTokenRepository() in 12.208µs
+[Fx] BEFORE RUN	provide: app/internal/provider.NewTokenLogic()
+[Fx] RUN	provide: app/internal/provider.NewTokenLogic() in 4.5µs
+[Fx] BEFORE RUN	provide: app/internal/provider.NewAdminService()
+[Fx] RUN	provide: app/internal/provider.NewAdminService() in 2.083µs
+[Fx] BEFORE RUN	provide: app/internal/provider.NewAdminController()
+[Fx] RUN	provide: app/internal/provider.NewAdminController() in 1.958µs
+[Fx] BEFORE RUN	provide: app/internal/provider.NewAdminRoute()
+[Fx] RUN	provide: app/internal/provider.NewAdminRoute() in 2.209µs
+[Fx] BEFORE RUN	provide: app/internal/provider.NewUserRepository()
+[Fx] RUN	provide: app/internal/provider.NewUserRepository() in 3.75µs
+[Fx] BEFORE RUN	provide: app/internal/provider.NewUserService()
+[Fx] RUN	provide: app/internal/provider.NewUserService() in 2.375µs
+[Fx] BEFORE RUN	provide: app/internal/provider.NewUserController()
+[Fx] RUN	provide: app/internal/provider.NewUserController() in 1.417µs
+[Fx] BEFORE RUN	provide: app/internal/provider.NewUserRoute()
+[Fx] RUN	provide: app/internal/provider.NewUserRoute() in 1.5µs
+[Fx] BEFORE RUN	provide: app/internal/provider.NewIndexRoute()
+[Fx] RUN	provide: app/internal/provider.NewIndexRoute() in 1.542µs
+[Fx] BEFORE RUN	provide: app/internal/provider.NewRouter()
+[Fx] RUN	provide: app/internal/provider.NewRouter() in 3.958µs
+[Fx] HOOK OnStart		app/internal/provider.NewDatabase.func1() executing (caller: app/internal/provider.NewDatabase)
+[Fx] HOOK OnStart		app/internal/provider.NewDatabase.func1() called by app/internal/provider.NewDatabase ran successfully in 10.584µs
+[Fx] HOOK OnStart		main.runApplication.func1() executing (caller: main.runApplication)
+[Fx] HOOK OnStart		main.runApplication.func1() called by main.runApplication ran successfully in 6.5µs
+[Fx] RUNNING
+[GIN-debug] [WARNING] Running in "debug" mode. Switch to "release" mode in production.
+ - using env:	export GIN_MODE=release
+ - using code:	gin.SetMode(gin.ReleaseMode)
+
+[GIN-debug] POST   /api/admin/login          --> app/internal/controller/admin.(*AdminController).AdminLogin-fm (5 handlers)
+[GIN-debug] POST   /api/admin/initPwd        --> app/internal/controller/admin.(*AdminController).InitPwd-fm (5 handlers)
+[GIN-debug] GET    /api/admin/profile        --> app/internal/controller/admin.(*AdminController).Profile-fm (5 handlers)
+[GIN-debug] POST   /api/user/list            --> app/internal/controller/user.(*UserController).UserList-fm (5 handlers)
+[GIN-debug] GET    /api/user/:id             --> app/internal/controller/user.(*UserController).GetUserInfo-fm (5 handlers)
+[GIN-debug] GET    /api/index/health         --> app/internal/router.(*IndexRoute).InitRoute.func1 (5 handlers)
+[GIN-debug] Listening and serving HTTP on :8081
+[Fx] TERMINATED
+[Fx] HOOK OnStop		main.runApplication.func2() executing (caller: main.runApplication)
+[Fx] HOOK OnStop		main.runApplication.func2() called by main.runApplication ran successfully in 204.542µs
+[Fx] HOOK OnStop		app/internal/provider.NewDatabase.func2() executing (caller: app/internal/provider.NewDatabase)
+[Fx] HOOK OnStop		app/internal/provider.NewDatabase.func2() called by app/internal/provider.NewDatabase ran successfully in 18.042µs

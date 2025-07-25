@@ -1,8 +1,8 @@
 package middleware
 
 import (
-	"app/internal/logic"
-	"app/internal/model"
+	"app/internal/repository"
+	"app/internal/service"
 	"app/tools/resp"
 	"strings"
 
@@ -10,7 +10,7 @@ import (
 )
 
 // JwtMiddlewareWithWhitelist JWT中间件（支持白名单）
-func JwtMiddlewareWithWhitelist(whitelist []string) gin.HandlerFunc {
+func JwtMiddlewareWithWhitelist(whitelist []string, tokenService service.TokenService, adminRepo repository.AdminRepo) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		// 检查当前请求路径是否在白名单中
 		currentPath := c.Request.URL.Path
@@ -28,18 +28,20 @@ func JwtMiddlewareWithWhitelist(whitelist []string) gin.HandlerFunc {
 			resp.NeedLogin().Response()
 		}
 
-		data, err := logic.TokenLogicInstance.CheckJwt(token)
+		data, err := tokenService.CheckJwt(token)
 		if err != nil {
 			(&resp.JsonResp{Code: resp.ReAuthFail, Msg: "jwt解析失败"}).Response()
 		}
 
-		user := &model.Admin{
-			Id: data.UserId,
-		}
-		user = user.GetAdmin()
-		if user.Id <= 0 {
+		// 验证用户是否存在
+		user, err := adminRepo.GetByID(data.UserId)
+		if err != nil || user.Id <= 0 {
 			(&resp.JsonResp{Code: resp.ReAuthFail, Msg: "未查询到用户"}).Response()
 		}
+
+		// 将用户信息存储到上下文中，供后续处理使用
+		c.Set("current_user", user)
+		c.Set("current_user_id", user.Id)
 
 		c.Next()
 	}
