@@ -30,8 +30,8 @@ func NewRouter(
 	userRoute *router.UserRoute,
 	indexRoute *router.IndexRoute,
 	conf *config.Config,
-	service service.Service,
-	repo repository.Repository,
+	tokenService service.TokenService,
+	adminRepo repository.AdminRepo,
 ) *router.Router {
-	return router.NewRouter(adminRoute, userRoute, indexRoute, conf, service.Token(), repo.Admin())
+	return router.NewRouter(adminRoute, userRoute, indexRoute, conf, tokenService, adminRepo)
 }

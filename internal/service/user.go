@@ -8,7 +8,7 @@ import (
 
 // UserService 用户服务接口
 type UserService interface {
-	UserList(req request.UserSearchRequest) ([]model.User, int64, error)
+	ListUser(req request.UserSearchRequest) ([]model.User, int64, error)
 	LoadUser(uid string) (*model.User, error)
 	SearchUser(search map[string]interface{}) (*model.User, error)
 	CreateUser(user *model.User) error
@@ -27,7 +27,7 @@ func NewUserService(userRepo repository.UserRepo) UserService {
 	}
 }
 
-func (u *UserServiceImpl) UserList(req request.UserSearchRequest) ([]model.User, int64, error) {
+func (u *UserServiceImpl) ListUser(req request.UserSearchRequest) ([]model.User, int64, error) {
 	// 参数验证
 	if req.Page <= 0 {
 		req.Page = 1

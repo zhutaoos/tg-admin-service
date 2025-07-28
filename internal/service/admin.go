@@ -15,6 +15,13 @@ type AdminService interface {
 	InitPwd(req request.InitPwdRequest) error
 }
 
+// LoginResult 登录结果
+type LoginResult struct {
+	Token     string       `json:"token"`
+	TokenInfo interface{}  `json:"token_info"`
+	User      *model.Admin `json:"user"`
+}
+
 type AdminServiceImpl struct {
 	adminRepo  repository.AdminRepo
 	tokenLogic TokenService

@@ -37,9 +37,6 @@ func main() {
 	app := fx.New(
 		// 提供命令行参数作为依赖
 		fx.Provide(
-			func() string {
-				return config.Mode
-			},
 			fx.Annotated{
 				Name: "mode",
 				Target: func() string {

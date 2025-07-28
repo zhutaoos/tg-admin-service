@@ -6,11 +6,17 @@ import (
 	"gorm.io/gorm"
 )
 
-// NewRepository 创建统一的仓储Provider
-func NewRepository(db *gorm.DB) repository.Repository {
-	return &repository.RepositoryImpl{
-		UserRepo:  repository.NewUserRepository(db),
-		AdminRepo: repository.NewAdminRepository(db),
-		TokenRepo: repository.NewTokenRepository(db),
-	}
+// NewUserRepository 创建用户仓储Provider
+func NewUserRepository(db *gorm.DB) repository.UserRepo {
+	return repository.NewUserRepository(db)
+}
+
+// NewAdminRepository 创建管理员仓储Provider
+func NewAdminRepository(db *gorm.DB) repository.AdminRepo {
+	return repository.NewAdminRepository(db)
+}
+
+// NewTokenRepository 创建Token仓储Provider
+func NewTokenRepository(db *gorm.DB) repository.TokenRepo {
+	return repository.NewTokenRepository(db)
 }

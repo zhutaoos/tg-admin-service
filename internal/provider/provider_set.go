@@ -1,6 +1,11 @@
 package provider
 
-import "go.uber.org/fx"
+import (
+	admin_controller "app/internal/controller/admin"
+	user_controller "app/internal/controller/user"
+
+	"go.uber.org/fx"
+)
 
 // InfrastructureModule 基础设施层Module
 var InfrastructureModule = fx.Options(
@@ -11,28 +16,22 @@ var InfrastructureModule = fx.Options(
 		NewConfigWatcher,
 		NewDatabase,
 		NewRedis,
-	),
-)
-
-// RepositoryModule 仓储层Module
-var RepositoryModule = fx.Options(
-	fx.Provide(
-		NewRepository,
-	),
-)
-
-// ServiceModule 服务层Module
-var ServiceModule = fx.Options(
-	fx.Provide(
-		NewService,
+		// Repository层Provider
+		NewUserRepository,
+		NewAdminRepository,
+		NewTokenRepository,
+		// Service层Provider
+		NewUserService,
+		NewAdminService,
+		NewTokenService,
 	),
 )
 
 // ControllerModule 控制器Module
 var ControllerModule = fx.Options(
 	fx.Provide(
-		NewAdminController,
-		NewUserController,
+		admin_controller.NewAdminController,
+		user_controller.NewUserController,
 	),
 )
 
@@ -49,8 +48,6 @@ var RouterModule = fx.Options(
 // AllModules 所有模块
 var AllModules = fx.Options(
 	InfrastructureModule,
-	RepositoryModule,
-	ServiceModule,
 	ControllerModule,
 	RouterModule,
 )

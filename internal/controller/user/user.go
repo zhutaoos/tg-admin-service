@@ -1,4 +1,4 @@
-package admin_api
+package user_controller
 
 import (
 	"app/internal/request"
@@ -11,13 +11,13 @@ import (
 
 // UserController 用户控制器
 type UserController struct {
-	userService service.UserService
+	service.UserService
 }
 
 // NewUserController 创建用户控制器实例
 func NewUserController(userService service.UserService) *UserController {
 	return &UserController{
-		userService: userService,
+		UserService: userService,
 	}
 }
 
@@ -29,7 +29,7 @@ func (uc *UserController) UserList(ctx *gin.Context) {
 	}
 
 	// 调用业务层获取用户列表
-	users, total, err := uc.userService.UserList(req)
+	users, total, err := uc.ListUser(req)
 	if err != nil {
 		(&resp.JsonResp{Code: resp.ReError, Msg: "查询用户列表失败: " + err.Error()}).Response()
 	}
@@ -60,7 +60,7 @@ func (uc *UserController) GetUserInfo(ctx *gin.Context) {
 		(&resp.JsonResp{Code: resp.ReFail, Msg: "用户ID不能为空"}).Response()
 	}
 
-	user, err := uc.userService.LoadUser(userId)
+	user, err := uc.LoadUser(userId)
 	if err != nil {
 		(&resp.JsonResp{Code: resp.ReFail, Msg: "用户不存在"}).Response()
 	}
