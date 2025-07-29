@@ -10,7 +10,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"strconv"
 	"time"
 
@@ -100,21 +99,23 @@ func (tl *TokenServiceImpl) CheckJwt(j string) (*jwt.UserJwt, error) {
 	}
 
 	cacheKey := GetTokenKey(userJwt.Token)
-	r, err := tl.redis.HGetAll(context.Background(), cacheKey).Result()
+	r, err := tl.redis.Get(context.Background(), cacheKey).Result()
+	if err != nil {
+		if err == redis.Nil {
+			return nil, errors.New("token 不存在")
+		}
+		return nil, err
+	}
+
+	var userJwtCache jwt.UserJwt
+	err = json.Unmarshal([]byte(r), &userJwtCache)
 	if err != nil {
 		return nil, err
 	}
-	i, ok := r["uid"]
-	if !ok {
-		return nil, errors.New("账户已经在其他终端上登录")
-	}
 
-	uid, _ := conv.Conv[uint](i)
-	fmt.Println(r)
-	fmt.Println(userJwt)
-	fmt.Println(uid)
-	if uid != userJwt.UserId || r["token"] != userJwt.Token {
-		return nil, errors.New("账户已经在其他终端上登录[1]")
+	uid, _ := conv.Conv[uint](userJwtCache.UserId)
+	if uid != userJwt.UserId || userJwtCache.Token != userJwt.Token {
+		return nil, errors.New("账户已经在其他终端上登录")
 	}
 
 	if userJwt.ExpireTime < time.Now().Unix() {

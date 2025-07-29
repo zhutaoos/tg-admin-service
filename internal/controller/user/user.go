@@ -4,7 +4,6 @@ import (
 	"app/internal/request"
 	"app/internal/service"
 	"app/tools/resp"
-	"time"
 
 	"github.com/gin-gonic/gin"
 )
@@ -34,13 +33,6 @@ func (uc *UserController) UserList(ctx *gin.Context) {
 		(&resp.JsonResp{Code: resp.ReError, Msg: "查询用户列表失败: " + err.Error()}).Response()
 	}
 
-	// 处理时间格式化
-	for i := range users {
-		if users[i].CreateTime > 0 {
-			users[i].CreateTimeStr = time.Unix(users[i].CreateTime, 0).Format("2006-01-02 15:04:05")
-		}
-	}
-
 	// 构建响应数据
 	data := map[string]interface{}{
 		"list":  users,
@@ -63,11 +55,6 @@ func (uc *UserController) GetUserInfo(ctx *gin.Context) {
 	user, err := uc.LoadUser(userId)
 	if err != nil {
 		(&resp.JsonResp{Code: resp.ReFail, Msg: "用户不存在"}).Response()
-	}
-
-	// 格式化时间
-	if user.CreateTime > 0 {
-		user.CreateTimeStr = time.Unix(user.CreateTime, 0).Format("2006-01-02 15:04:05")
 	}
 
 	(&resp.JsonResp{Code: resp.ReSuccess, Msg: "获取用户信息成功", Data: user}).Response()
