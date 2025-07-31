@@ -106,6 +106,7 @@ func (router *Router) InitRoutes() {
 	router.AdminRoute.InitRoute(router.Engine)
 	router.UserRoute.InitRoute(router.Engine)
 	router.IndexRoute.InitRoute(router.Engine)
+	router.EvaluateRoute.InitRoute(router.Engine)
 }
 
 // Run 启动服务器
