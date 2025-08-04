@@ -2,23 +2,27 @@ package service
 
 import (
 	"app/internal/model"
-	"app/internal/repository"
+	"app/internal/request"
+
+	"gorm.io/gorm"
 )
 
 type EvaluateService interface {
-	GetList(groupId string) ([]*model.JsEvaluateDB, error)
+	GetList(request request.EvaluateSearchRequest) ([]*model.JsEvaluateDB, error)
 }
 
 type EvaluateServiceImpl struct {
-	evaluateRepo repository.EvaluateRepo
+	db *gorm.DB
 }
 
-func NewEvaluateService(evaluateRepo repository.EvaluateRepo) EvaluateService {
+func NewEvaluateService(db *gorm.DB) EvaluateService {
 	return &EvaluateServiceImpl{
-		evaluateRepo: evaluateRepo,
+		db: db,
 	}
 }
 
-func (e *EvaluateServiceImpl) GetList(groupId string) ([]*model.JsEvaluateDB, error) {
-	return e.evaluateRepo.GetList(groupId)
+func (e *EvaluateServiceImpl) GetList(request request.EvaluateSearchRequest) ([]*model.JsEvaluateDB, error) {
+	var list []*model.JsEvaluateDB
+	err := e.db.Where("group_id = ?", request.GroupId).Offset(request.GetOffset()).Limit(request.Limit).Find(&list).Error
+	return list, err
 }

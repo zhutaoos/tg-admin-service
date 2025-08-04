@@ -2,7 +2,6 @@ package service
 
 import (
 	"app/internal/model"
-	"app/internal/repository"
 	"app/tools/conv"
 	"app/tools/jwt"
 	"app/tools/logger"
@@ -14,6 +13,7 @@ import (
 	"time"
 
 	"github.com/redis/go-redis/v9"
+	"gorm.io/gorm"
 )
 
 // TokenService Token服务接口
@@ -23,15 +23,15 @@ type TokenService interface {
 }
 
 type TokenServiceImpl struct {
-	redis     *redis.Client
-	tokenRepo repository.TokenRepo
+	redis *redis.Client
+	db    *gorm.DB
 }
 
 // NewTokenLogic 创建TokenLogic实例
-func NewTokenLogic(redis *redis.Client, tokenRepo repository.TokenRepo) TokenService {
+func NewTokenLogic(redis *redis.Client, db *gorm.DB) TokenService {
 	return &TokenServiceImpl{
-		redis:     redis,
-		tokenRepo: tokenRepo,
+		redis: redis,
+		db:    db,
 	}
 }
 
@@ -46,7 +46,7 @@ func (tl *TokenServiceImpl) GenerateJwt(uid uint, exTime int64) (string, *jwt.Us
 	}
 
 	// 删除这个用户的旧token
-	tl.tokenRepo.DelToken(tokenModel)
+	delToken(tokenModel, tl.db)
 
 	tokenKey := GetTokenKey(userJwt.Token)
 	uidTokenKey := GetUidToken(int(uid))
@@ -58,7 +58,7 @@ func (tl *TokenServiceImpl) GenerateJwt(uid uint, exTime int64) (string, *jwt.Us
 	}
 
 	// 创建新的Token记录
-	err := tl.tokenRepo.CreateToken(tokenModel)
+	err := createToken(tokenModel, tl.db)
 	if err != nil {
 		logger.Error("创建token记录失败", "error", err)
 		(&resp.JsonResp{Code: resp.ReFail, Msg: "创建token记录失败", Data: nil}).Response()
@@ -90,6 +90,28 @@ func (tl *TokenServiceImpl) GenerateJwt(uid uint, exTime int64) (string, *jwt.Us
 	}
 
 	return j, userJwt
+}
+
+// DelToken 删除Token记录
+func delToken(token *model.Token, db *gorm.DB) error {
+	where := make(map[string]interface{})
+
+	if token.UserId > 0 {
+		where["user_id"] = token.UserId
+	}
+	if token.Id > 0 {
+		where["id"] = token.Id
+	}
+	if token.Token != "" {
+		where["token"] = token.Token
+	}
+
+	return db.Where(where).Delete(&model.Token{}).Error
+}
+
+// CreateToken 创建Token记录
+func createToken(token *model.Token, db *gorm.DB) error {
+	return db.Create(token).Error
 }
 
 func (tl *TokenServiceImpl) CheckJwt(j string) (*jwt.UserJwt, error) {

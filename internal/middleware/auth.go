@@ -1,7 +1,7 @@
 package middleware
 
 import (
-	"app/internal/repository"
+	"app/internal/model"
 	"app/internal/service"
 	"app/tools/resp"
 	"strings"
@@ -10,7 +10,7 @@ import (
 )
 
 // JwtMiddlewareWithWhitelist JWT中间件（支持白名单）
-func JwtMiddlewareWithWhitelist(whitelist []string, tokenService service.TokenService, adminRepo repository.AdminRepo) gin.HandlerFunc {
+func JwtMiddlewareWithWhitelist(whitelist []string, tokenService service.TokenService, adminService service.AdminService) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		// 检查当前请求路径是否在白名单中
 		currentPath := c.Request.URL.Path
@@ -34,7 +34,8 @@ func JwtMiddlewareWithWhitelist(whitelist []string, tokenService service.TokenSe
 		}
 
 		// 验证用户是否存在
-		user, err := adminRepo.GetByID(data.UserId)
+		user := &model.Admin{}
+		err = adminService.GetAdminById(int64(data.UserId), user)
 		if err != nil || user.Id <= 0 {
 			(&resp.JsonResp{Code: resp.ReAuthFail, Msg: "未查询到用户"}).Response()
 		}

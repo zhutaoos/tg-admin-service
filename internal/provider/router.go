@@ -3,8 +3,8 @@ package provider
 import (
 	"app/internal/config"
 	admin_controller "app/internal/controller/admin"
+	evaluate_controller "app/internal/controller/evaluate"
 	user_controller "app/internal/controller/user"
-	"app/internal/repository"
 	"app/internal/router"
 	"app/internal/service"
 )
@@ -24,14 +24,20 @@ func NewIndexRoute() *router.IndexRoute {
 	return router.NewIndexRoute()
 }
 
+// NewEvaluateRoute 创建评价路由Provider
+func NewEvaluateRoute(evaluateController *evaluate_controller.EvaluateController) *router.EvaluateRoute {
+	return router.NewEvaluateRoute(evaluateController)
+}
+
 // NewRouter 创建主路由Provider
 func NewRouter(
 	adminRoute *router.AdminRoute,
 	userRoute *router.UserRoute,
 	indexRoute *router.IndexRoute,
+	evaluateRoute *router.EvaluateRoute,
 	conf *config.Config,
 	tokenService service.TokenService,
-	adminRepo repository.AdminRepo,
+	adminService service.AdminService,
 ) *router.Router {
-	return router.NewRouter(adminRoute, userRoute, indexRoute, conf, tokenService, adminRepo)
+	return router.NewRouter(adminRoute, userRoute, indexRoute, evaluateRoute, conf, tokenService, adminService)
 }

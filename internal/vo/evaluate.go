@@ -4,6 +4,14 @@ import (
 	"gorm.io/datatypes"
 )
 
+// EvaluateListResponse 评价列表响应
+type EvaluateListResponse struct {
+	List  []JsEvaluate `json:"list"`
+	Total int64        `json:"total"`
+	Page  int          `json:"page"`
+	Limit int          `json:"limit"`
+}
+
 type JsEvaluate struct {
 	Id               string         `redis:"id" json:"id" gorm:"primaryKey"`
 	GroupID          string         `redis:"group_id" json:"group_id"`                           //群组id
@@ -24,4 +32,13 @@ type JsEvaluate struct {
 	Summary          string         `redis:"summary" json:"summary"`                             //总结
 	CjMedia          datatypes.JSON `redis:"cj_media" json:"cj_media" gorm:"type:json"`          //出击图片/视频
 	Status           int32          `redis:"status" json:"status"`                               //状态 0 待提交 1 已提交 2 审核通过 3 审核不通过
+}
+
+// EvaluateStatResponse 评价统计响应
+type EvaluateStatResponse struct {
+	TotalCount    int64   `json:"total_count"`
+	AvgScore      float64 `json:"avg_score"`
+	PendingCount  int64   `json:"pending_count"`
+	ApprovedCount int64   `json:"approved_count"`
+	RejectedCount int64   `json:"rejected_count"`
 }

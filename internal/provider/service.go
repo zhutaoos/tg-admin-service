@@ -1,26 +1,31 @@
 package provider
 
 import (
-	"app/internal/repository"
 	"app/internal/service"
 
 	"github.com/redis/go-redis/v9"
+	"gorm.io/gorm"
 )
 
 // NewUserService 创建用户服务Provider
-func NewUserService(userRepo repository.UserRepo) service.UserService {
-	return service.NewUserService(userRepo)
+func NewUserService(db *gorm.DB) service.UserService {
+	return service.NewUserService(db)
 }
 
 // NewAdminService 创建管理员服务Provider
 func NewAdminService(
-	adminRepo repository.AdminRepo,
+	db *gorm.DB,
 	tokenService service.TokenService,
 ) service.AdminService {
-	return service.NewAdminService(adminRepo, tokenService)
+	return service.NewAdminService(db, tokenService)
 }
 
 // NewTokenService 创建Token服务Provider
-func NewTokenService(redis *redis.Client, tokenRepo repository.TokenRepo) service.TokenService {
-	return service.NewTokenLogic(redis, tokenRepo)
+func NewTokenService(redis *redis.Client, db *gorm.DB) service.TokenService {
+	return service.NewTokenLogic(redis, db)
+}
+
+// NewEvaluateService 创建评价服务Provider
+func NewEvaluateService(db *gorm.DB) service.EvaluateService {
+	return service.NewEvaluateService(db)
 }

@@ -3,7 +3,6 @@ package router
 import (
 	"app/internal/config"
 	"app/internal/middleware"
-	"app/internal/repository"
 	"app/internal/service"
 	"app/tools/logger"
 	"fmt"
@@ -16,13 +15,14 @@ import (
 
 // Router 主路由结构
 type Router struct {
-	Engine       *gin.Engine
-	AdminRoute   *AdminRoute
-	UserRoute    *UserRoute
-	IndexRoute   *IndexRoute
-	Config       *config.Config
-	TokenService service.TokenService
-	AdminRepo    repository.AdminRepo
+	Engine        *gin.Engine
+	AdminRoute    *AdminRoute
+	UserRoute     *UserRoute
+	IndexRoute    *IndexRoute
+	EvaluateRoute *EvaluateRoute
+	Config        *config.Config
+	TokenService  service.TokenService
+	adminService  service.AdminService
 }
 
 // NewRouter 创建路由实例
@@ -30,17 +30,19 @@ func NewRouter(
 	adminRoute *AdminRoute,
 	userRoute *UserRoute,
 	indexRoute *IndexRoute,
+	evaluateRoute *EvaluateRoute,
 	conf *config.Config,
 	tokenService service.TokenService,
-	adminRepo repository.AdminRepo,
+	adminService service.AdminService,
 ) *Router {
 	return &Router{
-		AdminRoute:   adminRoute,
-		UserRoute:    userRoute,
-		IndexRoute:   indexRoute,
-		Config:       conf,
-		TokenService: tokenService,
-		AdminRepo:    adminRepo,
+		AdminRoute:    adminRoute,
+		UserRoute:     userRoute,
+		IndexRoute:    indexRoute,
+		EvaluateRoute: evaluateRoute,
+		Config:        conf,
+		TokenService:  tokenService,
+		adminService:  adminService,
 	}
 }
 
@@ -94,7 +96,7 @@ func (router *Router) SetupEngine() *gin.Engine {
 		"/api/admin/initPwd", // 初始化密码
 		"/api/index/health",  // 健康检查
 	}
-	r.Use(middleware.JwtMiddlewareWithWhitelist(whitelist, router.TokenService, router.AdminRepo))
+	r.Use(middleware.JwtMiddlewareWithWhitelist(whitelist, router.TokenService, router.adminService))
 
 	router.Engine = r
 	return r

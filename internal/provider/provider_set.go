@@ -2,6 +2,7 @@ package provider
 
 import (
 	admin_controller "app/internal/controller/admin"
+	evaluate_controller "app/internal/controller/evaluate"
 	user_controller "app/internal/controller/user"
 
 	"go.uber.org/fx"
@@ -16,14 +17,11 @@ var InfrastructureModule = fx.Options(
 		NewConfigWatcher,
 		NewDatabase,
 		NewRedis,
-		// Repository层Provider
-		NewUserRepository,
-		NewAdminRepository,
-		NewTokenRepository,
 		// Service层Provider
 		NewUserService,
 		NewAdminService,
 		NewTokenService,
+		NewEvaluateService,
 	),
 )
 
@@ -32,6 +30,7 @@ var ControllerModule = fx.Options(
 	fx.Provide(
 		admin_controller.NewAdminController,
 		user_controller.NewUserController,
+		evaluate_controller.NewEvaluateController,
 	),
 )
 
@@ -41,6 +40,7 @@ var RouterModule = fx.Options(
 		NewAdminRoute,
 		NewUserRoute,
 		NewIndexRoute,
+		NewEvaluateRoute,
 		NewRouter,
 	),
 )

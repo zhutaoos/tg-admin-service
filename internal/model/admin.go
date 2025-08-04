@@ -2,8 +2,9 @@ package model
 
 import (
 	"app/internal/config"
-	"golang.org/x/crypto/bcrypt"
 	"time"
+
+	"golang.org/x/crypto/bcrypt"
 )
 
 type Admin struct {
@@ -25,7 +26,7 @@ func (admin *Admin) GetAdmin() *Admin {
 
 func (admin *Admin) GetList(pid uint) []*Admin {
 	list := make([]*Admin, 0)
-	
+
 	return list
 }
 

@@ -2,10 +2,10 @@ package service
 
 import (
 	"app/internal/model"
-	"app/internal/repository"
 	"app/internal/request"
 
 	"golang.org/x/crypto/bcrypt"
+	"gorm.io/gorm"
 )
 
 // AdminService 管理员服务接口
@@ -13,6 +13,7 @@ type AdminService interface {
 	Login(req request.AdminLoginRequest) (*LoginResult, error)
 	GetProfile(adminId int64) (*model.Admin, error)
 	InitPwd(req request.InitPwdRequest) error
+	GetAdminById(id int64, admin *model.Admin) error
 }
 
 // LoginResult 登录结果
@@ -23,25 +24,30 @@ type LoginResult struct {
 }
 
 type AdminServiceImpl struct {
-	adminRepo  repository.AdminRepo
+	db         *gorm.DB
 	tokenLogic TokenService
 }
 
 // NewAdminService 创建AdminService实例
 func NewAdminService(
-	adminRepo repository.AdminRepo,
+	db *gorm.DB,
 	tokenLogic TokenService,
 ) AdminService {
 	return &AdminServiceImpl{
-		adminRepo:  adminRepo,
+		db:         db,
 		tokenLogic: tokenLogic,
 	}
+}
+
+func (as *AdminServiceImpl) GetAdminById(id int64, admin *model.Admin) error {
+	return as.db.Where("id = ?", id).First(admin).Error
 }
 
 // Login 管理员登录
 func (as *AdminServiceImpl) Login(req request.AdminLoginRequest) (*LoginResult, error) {
 	// 根据账号查询管理员
-	admin, err := as.adminRepo.GetByAccount(req.Username)
+	admin := &model.Admin{}
+	err := as.db.Where("account = ?", req.Username).First(admin).Error
 	if err != nil {
 		return nil, err
 	}
@@ -67,7 +73,12 @@ func (as *AdminServiceImpl) Login(req request.AdminLoginRequest) (*LoginResult, 
 
 // GetProfile 获取管理员信息
 func (as *AdminServiceImpl) GetProfile(adminId int64) (*model.Admin, error) {
-	return as.adminRepo.GetByID(uint(adminId))
+	admin := &model.Admin{}
+	err := as.db.Where("id = ?", adminId).First(admin).Error
+	if err != nil {
+		return nil, err
+	}
+	return admin, nil
 }
 
 // InitPwd 初始化密码
@@ -84,38 +95,4 @@ func (as *AdminServiceImpl) InitPwd(req request.InitPwdRequest) error {
 	_ = string(hashedPassword)
 
 	return nil
-}
-
-// CreateAdmin 创建管理员
-func (as *AdminServiceImpl) CreateAdmin(admin *model.Admin) error {
-	// 密码加密
-	if admin.Password != "" {
-		hashedPassword, err := bcrypt.GenerateFromPassword([]byte(admin.Password), bcrypt.DefaultCost)
-		if err != nil {
-			return err
-		}
-		admin.Password = string(hashedPassword)
-	}
-
-	return as.adminRepo.Create(admin)
-}
-
-// UpdateAdmin 更新管理员信息
-func (as *AdminServiceImpl) UpdateAdmin(admin *model.Admin) error {
-	return as.adminRepo.Update(admin)
-}
-
-// UpdatePassword 更新管理员密码
-func (as *AdminServiceImpl) UpdatePassword(adminId uint, newPassword string) error {
-	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
-	if err != nil {
-		return err
-	}
-
-	return as.adminRepo.UpdatePassword(adminId, string(hashedPassword))
-}
-
-// DeleteAdmin 删除管理员
-func (as *AdminServiceImpl) DeleteAdmin(id int64) error {
-	return as.adminRepo.Delete(id)
 }

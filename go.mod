@@ -12,6 +12,7 @@ require (
 	github.com/spf13/viper v1.17.0
 	go.uber.org/fx v1.24.0
 	golang.org/x/crypto v0.23.0
+	gorm.io/datatypes v1.2.6
 	gorm.io/driver/mysql v1.5.6
 	gorm.io/gorm v1.30.0
 )
@@ -62,5 +63,4 @@ require (
 	google.golang.org/protobuf v1.32.0 // indirect
 	gopkg.in/ini.v1 v1.67.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
-	gorm.io/datatypes v1.2.6 // indirect
 )

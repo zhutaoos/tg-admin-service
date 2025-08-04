@@ -2,29 +2,36 @@ package service
 
 import (
 	"app/internal/model"
-	"app/internal/repository"
 	"app/internal/request"
+
+	"gorm.io/gorm"
 )
 
 // UserService 用户服务接口
 type UserService interface {
 	ListUser(req request.UserSearchRequest) ([]model.User, int64, error)
+	GetUserById(id int64, user *model.User) error
 	LoadUser(uid string) (*model.User, error)
-	SearchUser(search map[string]interface{}) (*model.User, error)
-	CreateUser(user *model.User) error
-	UpdateUser(user *model.User) error
-	DeleteUser(id int64) error
 }
 
 type UserServiceImpl struct {
-	userRepo repository.UserRepo
+	db *gorm.DB
 }
 
 // NewUserService 创建UserService实例
-func NewUserService(userRepo repository.UserRepo) UserService {
+func NewUserService(db *gorm.DB) UserService {
 	return &UserServiceImpl{
-		userRepo: userRepo,
+		db: db,
 	}
+}
+
+func (u *UserServiceImpl) GetUserById(id int64, user *model.User) error {
+	return u.db.Where("id = ?", id).First(user).Error
+}
+
+func (u *UserServiceImpl) LoadUser(uid string) (*model.User, error) {
+	user := &model.User{}
+	return user, u.db.Where("id = ?", uid).First(user).Error
 }
 
 func (u *UserServiceImpl) ListUser(req request.UserSearchRequest) ([]model.User, int64, error) {
@@ -36,45 +43,29 @@ func (u *UserServiceImpl) ListUser(req request.UserSearchRequest) ([]model.User,
 		req.Limit = 10
 	}
 
-	return u.userRepo.GetList(req)
-}
+	var users []model.User
+	var total int64
 
-// LoadUser 根据 uid 搜索用户
-func (u *UserServiceImpl) LoadUser(uid string) (*model.User, error) {
-	userModel := &model.User{UserId: uid}
-	err := u.userRepo.GetUserInfo(userModel)
-	if err != nil {
-		return nil, err
+	query := u.db.Model(&model.User{})
+
+	// 构建查询条件
+	if req.Nickname != "" {
+		query = query.Where("nickname LIKE ?", "%"+req.Nickname+"%")
 	}
-	return userModel, nil
-}
-
-func (u *UserServiceImpl) SearchUser(search map[string]interface{}) (*model.User, error) {
-	user := &model.User{}
-	if _, ok := search["nickname"]; ok {
-		v, ok := search["nickname"].(string)
-		if ok {
-			user.Nickname = v
-		}
+	if req.Status > 0 {
+		query = query.Where("status = ?", req.Status)
 	}
-	err := u.userRepo.GetUserInfo(user)
-	if err != nil {
-		return nil, err
+
+	// 获取总数
+	if err := query.Count(&total).Error; err != nil {
+		return nil, 0, err
 	}
-	return user, nil
-}
 
-// CreateUser 创建用户
-func (u *UserServiceImpl) CreateUser(user *model.User) error {
-	return u.userRepo.Create(user)
-}
+	// 分页查询
+	offset := (req.Page - 1) * req.Limit
+	if err := query.Offset(offset).Limit(req.Limit).Find(&users).Error; err != nil {
+		return nil, 0, err
+	}
 
-// UpdateUser 更新用户
-func (u *UserServiceImpl) UpdateUser(user *model.User) error {
-	return u.userRepo.Update(user)
-}
-
-// DeleteUser 删除用户
-func (u *UserServiceImpl) DeleteUser(id int64) error {
-	return u.userRepo.Delete(id)
+	return users, total, nil
 }
