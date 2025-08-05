@@ -92,9 +92,9 @@ func (router *Router) SetupEngine() *gin.Engine {
 
 	// JWT中间件白名单
 	whitelist := []string{
-		"/api/admin/login",   // 管理员登录
-		"/api/admin/initPwd", // 初始化密码
-		"/api/index/health",  // 健康检查
+		"/admin/login",      // 管理员登录
+		"/admin/initPwd",    // 初始化密码
+		"/api/index/health", // 健康检查
 	}
 	r.Use(middleware.JwtMiddlewareWithWhitelist(whitelist, router.TokenService, router.adminService))
 

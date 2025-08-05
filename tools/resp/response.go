@@ -54,6 +54,13 @@ func (j *JsonResp) SetHttpCode(code int) {
 	j.httpCode = code
 }
 
+func Ok(data any) {
+	j := &JsonResp{}
+	j.Code = ReSuccess
+	j.Data = data
+	panic(j)
+}
+
 func (j *JsonResp) Response() {
 	panic(j)
 }

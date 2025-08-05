@@ -30,12 +30,5 @@ func (ec *EvaluateController) GetEvaluateList(ctx *gin.Context) {
 		(&resp.JsonResp{Code: resp.ReError, Msg: "查询失败: " + err.Error()}).Response()
 		return
 	}
-
-	//responseData := converter.ToEvaluateListResponse(evaluates, total, req.Page, req.Limit)
-
-	(&resp.JsonResp{
-		Code: resp.ReSuccess,
-		Msg:  "获取评价列表成功",
-		Data: evaluates,
-	}).Response()
+	resp.Ok(evaluates)
 }

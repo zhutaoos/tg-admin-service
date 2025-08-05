@@ -20,7 +20,7 @@ func NewAdminRoute(adminController *admin_controller.AdminController) *AdminRout
 
 // InitRoute 初始化管理员路由
 func (ar *AdminRoute) InitRoute(engine *gin.Engine) {
-	ar.group = engine.Group("api/admin")
+	ar.group = engine.Group("/admin")
 
 	// 管理员相关路由
 	ar.group.POST("login", ar.adminController.AdminLogin)
