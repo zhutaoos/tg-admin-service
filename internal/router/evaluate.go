@@ -23,6 +23,6 @@ func (ir *EvaluateRoute) InitRoute(engine *gin.Engine) {
 	ir.group = engine.Group("api/evaluate")
 
 	ir.group.POST("/list", ir.evaluateController.GetEvaluateList)
-
+	ir.group.POST("/update", ir.evaluateController.UpdateEvaluate)
 	// 其他首页相关路由可以在这里添加
 }

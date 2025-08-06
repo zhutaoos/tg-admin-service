@@ -61,6 +61,12 @@ func Ok(data any) {
 	panic(j)
 }
 
+func Success() {
+	j := &JsonResp{}
+	j.Code = ReSuccess
+	panic(j)
+}
+
 func (j *JsonResp) Response() {
 	panic(j)
 }

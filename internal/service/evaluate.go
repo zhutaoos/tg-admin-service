@@ -12,6 +12,7 @@ import (
 
 type EvaluateService interface {
 	GetList(request request.EvaluateSearchRequest) (vo.PageResultVo[vo.JsEvaluateVo], error)
+	UpdateEvaluate(param request.EvaluateUpdateParam) error
 }
 
 type EvaluateServiceImpl struct {
@@ -24,6 +25,26 @@ func NewEvaluateService(db *gorm.DB) EvaluateService {
 	}
 }
 
+func (e *EvaluateServiceImpl) UpdateEvaluate(param request.EvaluateUpdateParam) error {
+	// 创建更新字段结构体
+	updateFields := request.EvaluateUpdateFields{
+		Dj:      param.Dj,
+		Rz:      param.Rz,
+		Sc:      param.Sc,
+		Fw:      param.Fw,
+		Td:      param.Td,
+		Hj:      param.Hj,
+		Zb:      param.Zb,
+		Summary: param.Summary,
+		Status:  param.Status,
+	}
+
+	return e.db.Model(&model.JsEvaluateDB{}).
+		Where("id = ?", param.Id).
+		Select("dj, rz, sc, fw, td, hj, zb, summary, status").
+		Updates(updateFields).Error
+}
+
 func (e *EvaluateServiceImpl) GetList(request request.EvaluateSearchRequest) (vo.PageResultVo[vo.JsEvaluateVo], error) {
 	groupIds := request.GroupIds
 	if len(groupIds) == 0 {
@@ -32,11 +53,37 @@ func (e *EvaluateServiceImpl) GetList(request request.EvaluateSearchRequest) (vo
 
 	var list []*model.JsEvaluateDB
 	var total int64
-	err := e.db.Where("group_id in ?", groupIds).Offset(request.GetOffset()).Limit(request.Limit).Find(&list).Error
+
+	// 构建查询条件
+	query := e.db.Where("group_id in ?", groupIds)
+
+	// 根据请求参数动态添加where条件
+	if request.Status > 0 {
+		query = query.Where("status = ?", request.Status)
+	}
+
+	if request.EvaluateNickName != "" {
+		query = query.Where("evaluate_nick_name LIKE ?", "%"+request.EvaluateNickName+"%")
+	}
+
+	// 执行查询
+	err := query.Offset(request.GetOffset()).Limit(request.Limit).Find(&list).Error
 	if err != nil {
 		return vo.PageResultVo[vo.JsEvaluateVo]{}, err
 	}
-	err = e.db.Model(&model.JsEvaluateDB{}).Where("group_id in ?", groupIds).Count(&total).Error
+
+	// 构建计数查询条件（与查询条件保持一致）
+	countQuery := e.db.Model(&model.JsEvaluateDB{}).Where("group_id in ?", groupIds)
+
+	if request.Status > 0 {
+		countQuery = countQuery.Where("status = ?", request.Status)
+	}
+
+	if request.EvaluateNickName != "" {
+		countQuery = countQuery.Where("evaluate_nick_name LIKE ?", "%"+request.EvaluateNickName+"%")
+	}
+
+	err = countQuery.Count(&total).Error
 	if err != nil {
 		return vo.PageResultVo[vo.JsEvaluateVo]{}, err
 	}

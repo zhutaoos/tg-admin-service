@@ -32,3 +32,17 @@ func (ec *EvaluateController) GetEvaluateList(ctx *gin.Context) {
 	}
 	resp.Ok(evaluates)
 }
+
+func (ec *EvaluateController) UpdateEvaluate(ctx *gin.Context) {
+	var param request.EvaluateUpdateParam
+	if err := ctx.ShouldBind(&param); err != nil {
+		(&resp.JsonResp{Code: resp.ReFail, Msg: "参数错误: " + err.Error()}).Response()
+		return
+	}
+	if err := param.Validate(); err != nil {
+		(&resp.JsonResp{Code: resp.ReFail, Msg: "参数错误: " + err.Error()}).Response()
+		return
+	}
+	ec.evaluateService.UpdateEvaluate(param)
+	resp.Success()
+}
