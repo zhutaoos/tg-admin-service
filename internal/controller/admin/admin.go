@@ -1,6 +1,8 @@
 package admin_controller
 
 import (
+	"app/internal/config"
+	"app/internal/model"
 	"app/internal/request"
 	"app/internal/service"
 	"app/tools/resp"
@@ -66,7 +68,7 @@ func (ac *AdminController) InitPwd(ctx *gin.Context) {
 
 // Profile 获取用户信息
 func (ac *AdminController) Profile(ctx *gin.Context) {
-	// 这里应该从JWT中获取用户ID，暂时返回成功
-	// TODO: 实现从JWT中获取用户信息的逻辑
-	(&resp.JsonResp{Code: resp.ReSuccess, Msg: "获取用户信息成功", Data: nil}).Response()
+	user := ctx.MustGet(config.CurrentUser).(*model.Admin)
+
+	resp.Ok(user)
 }

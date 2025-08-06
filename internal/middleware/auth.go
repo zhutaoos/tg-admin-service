@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"app/internal/config"
 	"app/internal/model"
 	"app/internal/service"
 	"app/tools/resp"
@@ -41,8 +42,8 @@ func JwtMiddlewareWithWhitelist(whitelist []string, tokenService service.TokenSe
 		}
 
 		// 将用户信息存储到上下文中，供后续处理使用
-		c.Set("current_user", user)
-		c.Set("current_user_id", user.Id)
+		c.Set(config.CurrentUser, user)
+		c.Set(config.CurrentUserId, user.Id)
 
 		c.Next()
 	}

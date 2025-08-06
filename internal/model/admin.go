@@ -5,12 +5,13 @@ import (
 	"time"
 
 	"golang.org/x/crypto/bcrypt"
+	"gorm.io/datatypes"
 )
 
 type Admin struct {
 	*MysqlBaseModel `gorm:"-:all"` // -:all 无读写迁移权限，该字段不在数据库中
 	Id              uint           `json:"id" gorm:"primaryKey; type:INT(11) UNSIGNED NOT NULL AUTO_INCREMENT"`
-	GroupId         uint           `json:"group_id" gorm:"type:INT(16) UNSIGNED NOT NULL; default:0"`
+	GroupInfo       datatypes.JSON `json:"groupInfo" gorm:"type:json; column:group_info; default:[]"`
 	Account         string         `json:"account" gorm:"type:VARCHAR(32) NOT NULL;  default:''; comment:登录账号"`
 	Password        string         `json:"-" gorm:"type:VARCHAR(128) NOT NULL;"`
 	Name            string         `json:"name" gorm:"type:VARCHAR(32) NOT NULL; default:''"`

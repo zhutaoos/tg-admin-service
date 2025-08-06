@@ -2,7 +2,6 @@ package main
 
 import (
 	"app/internal/config"
-	"app/internal/model"
 	"app/internal/provider"
 	"app/internal/router"
 	"app/tools/logger"
@@ -106,16 +105,16 @@ func runApplication(
 ) {
 	lc.Append(fx.Hook{
 		OnStart: func(ctx context.Context) error {
-			// 数据库初始化
-			if config.InitDb == "true" {
-				logger.System("START INIT TABLE ====================")
-				// 使用注入的数据库实例进行表初始化
-				if err := db.AutoMigrate(&model.User{}, &model.Token{}, &model.Admin{}); err != nil {
-					logger.Error("数据库表初始化失败", "error", err)
-					return err
-				}
-				logger.System("END INIT TABLE ====================")
-			}
+			// // 数据库初始化
+			// if config.InitDb == "true" {
+			// 	logger.System("START INIT TABLE ====================")
+			// 	// 使用注入的数据库实例进行表初始化
+			// 	if err := db.AutoMigrate(&model.User{}, &model.Token{}, &model.Admin{}); err != nil {
+			// 		logger.Error("数据库表初始化失败", "error", err)
+			// 		return err
+			// 	}
+			// 	logger.System("END INIT TABLE ====================")
+			// }
 
 			// 在goroutine中启动服务器，避免阻塞
 			go func() {

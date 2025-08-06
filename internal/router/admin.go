@@ -25,5 +25,5 @@ func (ar *AdminRoute) InitRoute(engine *gin.Engine) {
 	// 管理员相关路由
 	ar.group.POST("login", ar.adminController.AdminLogin)
 	ar.group.POST("initPwd", ar.adminController.InitPwd)
-	ar.group.GET("profile", ar.adminController.Profile)
+	ar.group.POST("profile", ar.adminController.Profile)
 }
