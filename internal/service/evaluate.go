@@ -5,6 +5,7 @@ import (
 	"app/internal/request"
 	"app/internal/vo"
 	"errors"
+	"fmt"
 
 	"github.com/jinzhu/copier"
 	"gorm.io/gorm"
@@ -13,6 +14,7 @@ import (
 type EvaluateService interface {
 	GetList(request request.EvaluateSearchRequest) (vo.PageResultVo[vo.JsEvaluateVo], error)
 	UpdateEvaluate(param request.EvaluateUpdateParam) error
+	DeleteEvaluate(param request.EvaluateDeleteParam) error
 }
 
 type EvaluateServiceImpl struct {
@@ -25,24 +27,38 @@ func NewEvaluateService(db *gorm.DB) EvaluateService {
 	}
 }
 
+func (e *EvaluateServiceImpl) DeleteEvaluate(param request.EvaluateDeleteParam) error {
+	return e.db.Model(&model.JsEvaluateDB{}).Where("id = ?", param.Id).Delete(&model.JsEvaluateDB{}).Error
+}
+
 func (e *EvaluateServiceImpl) UpdateEvaluate(param request.EvaluateUpdateParam) error {
-	// 创建更新字段结构体
-	updateFields := request.EvaluateUpdateFields{
-		Dj:      param.Dj,
-		Rz:      param.Rz,
-		Sc:      param.Sc,
-		Fw:      param.Fw,
-		Td:      param.Td,
-		Hj:      param.Hj,
-		Zb:      param.Zb,
-		Summary: param.Summary,
-		Status:  param.Status,
+	// 使用map来确保零值也能被更新
+	updates := map[string]interface{}{
+		"dj":      param.Dj,
+		"rz":      param.Rz,
+		"sc":      param.Sc,
+		"fw":      param.Fw,
+		"td":      param.Td,
+		"hj":      param.Hj,
+		"zb":      param.Zb,
+		"summary": param.Summary,
+		"status":  param.Status,
 	}
 
-	return e.db.Model(&model.JsEvaluateDB{}).
+	// 执行更新并检查影响行数
+	result := e.db.Model(&model.JsEvaluateDB{}).
 		Where("id = ?", param.Id).
-		Select("dj, rz, sc, fw, td, hj, zb, summary, status").
-		Updates(updateFields).Error
+		Updates(updates)
+
+	if result.Error != nil {
+		return fmt.Errorf("更新失败: %w", result.Error)
+	}
+
+	if result.RowsAffected == 0 {
+		return fmt.Errorf("记录不存在或未发生任何更改")
+	}
+
+	return nil
 }
 
 func (e *EvaluateServiceImpl) GetList(request request.EvaluateSearchRequest) (vo.PageResultVo[vo.JsEvaluateVo], error) {

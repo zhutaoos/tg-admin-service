@@ -43,6 +43,30 @@ func (ec *EvaluateController) UpdateEvaluate(ctx *gin.Context) {
 		(&resp.JsonResp{Code: resp.ReFail, Msg: "参数错误: " + err.Error()}).Response()
 		return
 	}
-	ec.evaluateService.UpdateEvaluate(param)
+
+	if err := ec.evaluateService.UpdateEvaluate(param); err != nil {
+		(&resp.JsonResp{Code: resp.ReError, Msg: "更新失败: " + err.Error()}).Response()
+		return
+	}
+
+	resp.Success()
+}
+
+func (ec *EvaluateController) DeleteEvaluate(ctx *gin.Context) {
+	var param request.EvaluateDeleteParam
+	if err := ctx.ShouldBind(&param); err != nil {
+		(&resp.JsonResp{Code: resp.ReFail, Msg: "参数错误: " + err.Error()}).Response()
+		return
+	}
+	if err := param.Validate(); err != nil {
+		(&resp.JsonResp{Code: resp.ReFail, Msg: "参数错误: " + err.Error()}).Response()
+		return
+	}
+
+	if err := ec.evaluateService.DeleteEvaluate(param); err != nil {
+		(&resp.JsonResp{Code: resp.ReError, Msg: "删除失败: " + err.Error()}).Response()
+		return
+	}
+
 	resp.Success()
 }
