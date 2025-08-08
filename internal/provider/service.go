@@ -29,3 +29,8 @@ func NewTokenService(redis *redis.Client, db *gorm.DB) service.TokenService {
 func NewEvaluateService(db *gorm.DB) service.EvaluateService {
 	return service.NewEvaluateService(db)
 }
+
+// NewBotService 创建机器人服务Provider
+func NewBotService(db *gorm.DB) *service.BotService {
+	return service.NewBotService(db)
+}

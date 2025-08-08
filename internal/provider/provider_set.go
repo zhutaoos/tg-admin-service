@@ -4,6 +4,7 @@ import (
 	admin_controller "app/internal/controller/admin"
 	evaluate_controller "app/internal/controller/evaluate"
 	user_controller "app/internal/controller/user"
+	"app/internal/controller"
 
 	"go.uber.org/fx"
 )
@@ -22,6 +23,7 @@ var InfrastructureModule = fx.Options(
 		NewAdminService,
 		NewTokenService,
 		NewEvaluateService,
+		NewBotService,
 	),
 )
 
@@ -31,6 +33,7 @@ var ControllerModule = fx.Options(
 		admin_controller.NewAdminController,
 		user_controller.NewUserController,
 		evaluate_controller.NewEvaluateController,
+		controller.NewBotController,
 	),
 )
 
@@ -41,6 +44,7 @@ var RouterModule = fx.Options(
 		NewUserRoute,
 		NewIndexRoute,
 		NewEvaluateRoute,
+		NewBotRoute,
 		NewRouter,
 	),
 )

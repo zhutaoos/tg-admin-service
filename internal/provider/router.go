@@ -5,6 +5,7 @@ import (
 	admin_controller "app/internal/controller/admin"
 	evaluate_controller "app/internal/controller/evaluate"
 	user_controller "app/internal/controller/user"
+	"app/internal/controller"
 	"app/internal/router"
 	"app/internal/service"
 )
@@ -29,15 +30,23 @@ func NewEvaluateRoute(evaluateController *evaluate_controller.EvaluateController
 	return router.NewEvaluateRoute(evaluateController)
 }
 
+// NewBotRoute 创建机器人管理路由Provider
+func NewBotRoute(
+	botController *controller.BotController,
+) *router.BotRoute {
+	return router.NewBotRoute(botController)
+}
+
 // NewRouter 创建主路由Provider
 func NewRouter(
 	adminRoute *router.AdminRoute,
 	userRoute *router.UserRoute,
 	indexRoute *router.IndexRoute,
 	evaluateRoute *router.EvaluateRoute,
+	botRoute *router.BotRoute,
 	conf *config.Config,
 	tokenService service.TokenService,
 	adminService service.AdminService,
 ) *router.Router {
-	return router.NewRouter(adminRoute, userRoute, indexRoute, evaluateRoute, conf, tokenService, adminService)
+	return router.NewRouter(adminRoute, userRoute, indexRoute, evaluateRoute, botRoute, conf, tokenService, adminService)
 }
