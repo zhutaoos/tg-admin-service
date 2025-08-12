@@ -31,7 +31,7 @@ func JwtMiddlewareWithWhitelist(whitelist []string, tokenService service.TokenSe
 
 		data, err := tokenService.CheckJwt(token)
 		if err != nil {
-			(&resp.JsonResp{Code: resp.ReAuthFail, Msg: "jwt解析失败"}).Response()
+			(&resp.JsonResp{Code: resp.ReAuthFail, Msg: "请登录"}).Response()
 		}
 
 		// 验证用户是否存在

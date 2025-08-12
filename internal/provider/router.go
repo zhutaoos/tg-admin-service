@@ -3,9 +3,9 @@ package provider
 import (
 	"app/internal/config"
 	admin_controller "app/internal/controller/admin"
+	controller "app/internal/controller/bot"
 	evaluate_controller "app/internal/controller/evaluate"
 	user_controller "app/internal/controller/user"
-	"app/internal/controller"
 	"app/internal/router"
 	"app/internal/service"
 )

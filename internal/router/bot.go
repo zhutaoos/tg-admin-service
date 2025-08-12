@@ -1,14 +1,14 @@
 package router
 
 import (
-	"app/internal/controller"
-	"app/tools/logger"
+	controller "app/internal/controller/bot"
 
 	"github.com/gin-gonic/gin"
 )
 
 // BotRoute 机器人管理路由
 type BotRoute struct {
+	group         *gin.RouterGroup
 	botController *controller.BotController
 }
 
@@ -23,14 +23,10 @@ func NewBotRoute(
 
 // InitRoute 初始化机器人管理路由
 func (r *BotRoute) InitRoute(engine *gin.Engine) {
-	logger.System("初始化机器人管理路由...")
-	
 	// 机器人管理路由组
-	bot := engine.Group("/api/bot")
-	{
-		// 注册所有机器人相关路由
-		r.botController.RegisterRoutes(bot)
-	}
-	
-	logger.System("机器人管理路由初始化完成")
+	r.group = engine.Group("/api/bot")
+	r.group.POST("/config/create", r.botController.CreateBotConfig)
+	r.group.POST("/config/update", r.botController.UpdateBotConfig)
+	r.group.POST("/config/get", r.botController.GetBotConfig)
+	r.group.POST("/config/search", r.botController.SearchBotConfig)
 }

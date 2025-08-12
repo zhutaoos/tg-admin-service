@@ -4,7 +4,7 @@ import "github.com/go-playground/validator/v10"
 
 type EvaluateSearchRequest struct {
 	PageRequest
-	GroupIds         []string `json:"group_ids"`
+	GroupIds         []string `json:"groupIds"`
 	Status           int32    `json:"status"`
 	EvaluateNickName string   `json:"evaluateNickName"`
 }

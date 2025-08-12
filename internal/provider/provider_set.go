@@ -1,10 +1,10 @@
 package provider
 
 import (
+	"app/internal/controller/bot"
 	admin_controller "app/internal/controller/admin"
 	evaluate_controller "app/internal/controller/evaluate"
 	user_controller "app/internal/controller/user"
-	"app/internal/controller"
 
 	"go.uber.org/fx"
 )
