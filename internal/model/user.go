@@ -2,7 +2,7 @@ package model
 
 type User struct {
 	*MysqlBaseModel `gorm:"-:all"` // -:all 无读写迁移权限，该字段不在数据库中
-	Id              int64          `redis:"Id" json:"id" gorm:"primaryKey;type:BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT;comment:ID"`
+	Id              uint           `redis:"Id" json:"id" gorm:"primaryKey;type:BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT;comment:ID"`
 	UserId          string         `redis:"UserId" json:"user_id" gorm:"type:VARCHAR(255) NOT NULL;default:'';comment:用户ID"`
 	Nickname        string         `redis:"Nickname" json:"nickname" gorm:"type:VARCHAR(255) NOT NULL;default:'';comment:昵称"`
 	Avatar          string         `redis:"Avatar" json:"avatar" gorm:"type:VARCHAR(255) NOT NULL;default:'';comment:头像"`

@@ -8,7 +8,8 @@ import (
 
 // BotConfig represents bot configuration for a specific group
 type BotConfig struct {
-	ID         int64          `gorm:"primaryKey;autoIncrement"`
+	ID         uint           `gorm:"primaryKey;autoIncrement"`
+	AdminId    uint           `gorm:"not null"`
 	Region     string         `gorm:"not null"`
 	GroupID    int64          `gorm:"uniqueIndex;not null"`
 	Config     datatypes.JSON `gorm:"type:json column:config;default:{}"`

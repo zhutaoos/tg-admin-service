@@ -1,10 +1,10 @@
 package provider
 
 import (
+	"app/internal/controller/admin"
 	"app/internal/controller/bot"
-	admin_controller "app/internal/controller/admin"
-	evaluate_controller "app/internal/controller/evaluate"
-	user_controller "app/internal/controller/user"
+	"app/internal/controller/evaluate"
+	"app/internal/controller/user"
 
 	"go.uber.org/fx"
 )
@@ -24,16 +24,18 @@ var InfrastructureModule = fx.Options(
 		NewTokenService,
 		NewEvaluateService,
 		NewBotService,
+		NewGroupService,
 	),
 )
 
 // ControllerModule 控制器Module
 var ControllerModule = fx.Options(
 	fx.Provide(
-		admin_controller.NewAdminController,
-		user_controller.NewUserController,
-		evaluate_controller.NewEvaluateController,
-		controller.NewBotController,
+		admin.NewAdminController,
+		admin.NewGroupController,
+		user.NewUserController,
+		evaluate.NewEvaluateController,
+		bot.NewBotController,
 	),
 )
 
@@ -41,6 +43,7 @@ var ControllerModule = fx.Options(
 var RouterModule = fx.Options(
 	fx.Provide(
 		NewAdminRoute,
+		NewGroupRoute,
 		NewUserRoute,
 		NewIndexRoute,
 		NewEvaluateRoute,

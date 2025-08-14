@@ -1,4 +1,4 @@
-package user_controller
+package user
 
 import (
 	"app/internal/request"
@@ -20,7 +20,6 @@ func NewUserController(userService service.UserService) *UserController {
 	}
 }
 
-// UserList 用户列表
 func (uc *UserController) UserList(ctx *gin.Context) {
 	var req request.UserSearchRequest
 	if err := ctx.ShouldBind(&req); err != nil {
@@ -45,7 +44,6 @@ func (uc *UserController) UserList(ctx *gin.Context) {
 	(&resp.JsonResp{Code: resp.ReSuccess, Msg: "获取用户列表成功", Data: data}).Response()
 }
 
-// GetUserInfo 获取用户信息
 func (uc *UserController) GetUserInfo(ctx *gin.Context) {
 	userId := ctx.Param("id")
 	if userId == "" {

@@ -1,6 +1,7 @@
 package service
 
 import (
+	bizErrors "app/internal/error"
 	"context"
 	"encoding/json"
 
@@ -25,13 +26,14 @@ func NewBotService(db *gorm.DB) *BotService {
 // Bot Config Related Methods
 
 // CreateBotConfig creates a new bot configuration
-func (s *BotService) CreateBotConfig(ctx context.Context, request request.CreateBotConfigRequest) error {
+func (s *BotService) CreateBotConfig(ctx context.Context, request request.CreateBotConfigRequest, userid uint) error {
 	configJSON, err := json.Marshal(request)
 	if err != nil {
 		return err
 	}
 
 	botConfig := &model.BotConfig{
+		AdminId: userid,
 		GroupID: request.GroupID,
 		Region:  request.Region,
 		Config:  configJSON,
@@ -41,10 +43,18 @@ func (s *BotService) CreateBotConfig(ctx context.Context, request request.Create
 }
 
 // UpdateBotConfig updates bot configuration by group_id
-func (s *BotService) UpdateBotConfig(ctx context.Context, request request.UpdateBotConfigRequest) error {
+func (s *BotService) UpdateBotConfig(ctx context.Context, request request.UpdateBotConfigRequest, userid uint) error {
 	configJSON, err := json.Marshal(request)
 	if err != nil {
 		return err
+	}
+	var botConfig model.BotConfig
+	err = s.db.WithContext(ctx).Model(&model.BotConfig{}).Where("id = ?", request.Id).First(&botConfig).Error
+	if err != nil {
+		return err
+	}
+	if botConfig.AdminId != userid {
+		return bizErrors.ErrInvalidRequest
 	}
 
 	return s.db.WithContext(ctx).Model(&model.BotConfig{}).
@@ -63,10 +73,14 @@ func (s *BotService) GetBotConfig(ctx context.Context, id int64) (*model.BotConf
 }
 
 // GetBotConfigData retrieves and parses bot configuration data by group_id
-func (s *BotService) GetBotConfigData(ctx context.Context, id int64) (*vo.BotConfigVo, error) {
+func (s *BotService) GetBotConfigData(ctx context.Context, id int64, userId uint) (*vo.BotConfigVo, error) {
 	botConfig, err := s.GetBotConfig(ctx, id)
 	if err != nil {
 		return nil, err
+	}
+
+	if botConfig.AdminId != userId {
+		return nil, bizErrors.ErrInvalidRequest
 	}
 
 	var configData vo.BotConfigVo
@@ -81,7 +95,11 @@ func (s *BotService) GetBotConfigData(ctx context.Context, id int64) (*vo.BotCon
 	return &configData, nil
 }
 
-func (s *BotService) SearchBotConfig(ctx context.Context, request request.SearchBotConfigRequest) (vo.PageResultVo[vo.BotConfigListVo], error) {
+func (s *BotService) DeleteBotConfig(ctx context.Context, id int64, userId uint) error {
+	return s.db.WithContext(ctx).Where("admin_id = ? AND id = ?", userId, id).Delete(&model.BotConfig{}).Error
+}
+
+func (s *BotService) SearchBotConfig(ctx context.Context, request request.SearchBotConfigRequest, userId uint) (vo.PageResultVo[vo.BotConfigListVo], error) {
 	var botConfigs []model.BotConfig
 	var total int64
 	var result []vo.BotConfigListVo
@@ -93,6 +111,7 @@ func (s *BotService) SearchBotConfig(ctx context.Context, request request.Search
 	if request.Region != "" {
 		query = query.Where("region = ?", request.Region)
 	}
+	query.Where("admin_id = ?", userId)
 	err := query.Count(&total).Error
 
 	if err != nil {
@@ -100,7 +119,7 @@ func (s *BotService) SearchBotConfig(ctx context.Context, request request.Search
 		return vo.PageResultVo[vo.BotConfigListVo]{}, err
 	}
 
-	err = query.Offset(request.GetOffset()).Limit(request.Limit).Find(&botConfigs).Error
+	err = query.Order("create_time desc").Offset(request.GetOffset()).Limit(request.Limit).Find(&botConfigs).Error
 	if err != nil {
 		logger.Error("查询机器人配置列表失败 错误信息: %s", err.Error())
 		return vo.PageResultVo[vo.BotConfigListVo]{}, err

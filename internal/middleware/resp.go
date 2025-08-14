@@ -36,7 +36,6 @@ func RespMiddleware() gin.HandlerFunc {
 					c.Next()
 					return
 				default:
-					fmt.Println("unknown recover")
 					fmt.Println(e)
 					c.Next()
 					return

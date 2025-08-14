@@ -29,4 +29,5 @@ func (r *BotRoute) InitRoute(engine *gin.Engine) {
 	r.group.POST("/config/update", r.botController.UpdateBotConfig)
 	r.group.POST("/config/get", r.botController.GetBotConfig)
 	r.group.POST("/config/search", r.botController.SearchBotConfig)
+	r.group.POST("/config/delete", r.botController.DelBotConfig)
 }

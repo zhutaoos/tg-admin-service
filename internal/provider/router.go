@@ -15,6 +15,11 @@ func NewAdminRoute(adminController *admin_controller.AdminController) *router.Ad
 	return router.NewAdminRoute(adminController)
 }
 
+// NewGroupRoute 创建群组路由Provider
+func NewGroupRoute(groupController *admin_controller.GroupController) *router.GroupRoute {
+	return router.NewGroupRoute(groupController)
+}
+
 // NewUserRoute 创建用户路由Provider
 func NewUserRoute(userController *user_controller.UserController) *router.UserRoute {
 	return router.NewUserRoute(userController)
@@ -40,6 +45,7 @@ func NewBotRoute(
 // NewRouter 创建主路由Provider
 func NewRouter(
 	adminRoute *router.AdminRoute,
+	groupRoute *router.GroupRoute,
 	userRoute *router.UserRoute,
 	indexRoute *router.IndexRoute,
 	evaluateRoute *router.EvaluateRoute,
@@ -48,5 +54,5 @@ func NewRouter(
 	tokenService service.TokenService,
 	adminService service.AdminService,
 ) *router.Router {
-	return router.NewRouter(adminRoute, userRoute, indexRoute, evaluateRoute, botRoute, conf, tokenService, adminService)
+	return router.NewRouter(adminRoute, groupRoute, userRoute, indexRoute, evaluateRoute, botRoute, conf, tokenService, adminService)
 }

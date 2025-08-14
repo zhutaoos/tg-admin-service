@@ -17,6 +17,7 @@ import (
 type Router struct {
 	Engine        *gin.Engine
 	AdminRoute    *AdminRoute
+	GroupRoute    *GroupRoute
 	UserRoute     *UserRoute
 	IndexRoute    *IndexRoute
 	EvaluateRoute *EvaluateRoute
@@ -29,6 +30,7 @@ type Router struct {
 // NewRouter 创建路由实例
 func NewRouter(
 	adminRoute *AdminRoute,
+	groupRoute *GroupRoute,
 	userRoute *UserRoute,
 	indexRoute *IndexRoute,
 	evaluateRoute *EvaluateRoute,
@@ -39,6 +41,7 @@ func NewRouter(
 ) *Router {
 	return &Router{
 		AdminRoute:    adminRoute,
+		GroupRoute:    groupRoute,
 		UserRoute:     userRoute,
 		IndexRoute:    indexRoute,
 		EvaluateRoute: evaluateRoute,
@@ -109,6 +112,11 @@ func (router *Router) SetupEngine() *gin.Engine {
 func (router *Router) InitRoutes() {
 	// 初始化各个模块的路由
 	router.AdminRoute.InitRoute(router.Engine)
+	
+	// 初始化群组路由
+	adminGroup := router.Engine.Group("/admin")
+	router.GroupRoute.InitRoute(adminGroup)
+	
 	router.UserRoute.InitRoute(router.Engine)
 	router.IndexRoute.InitRoute(router.Engine)
 	router.EvaluateRoute.InitRoute(router.Engine)

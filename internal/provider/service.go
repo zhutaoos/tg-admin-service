@@ -16,8 +16,9 @@ func NewUserService(db *gorm.DB) service.UserService {
 func NewAdminService(
 	db *gorm.DB,
 	tokenService service.TokenService,
+	groupService service.GroupService,
 ) service.AdminService {
-	return service.NewAdminService(db, tokenService)
+	return service.NewAdminService(db, tokenService, groupService)
 }
 
 // NewTokenService 创建Token服务Provider
@@ -33,4 +34,9 @@ func NewEvaluateService(db *gorm.DB) service.EvaluateService {
 // NewBotService 创建机器人服务Provider
 func NewBotService(db *gorm.DB) *service.BotService {
 	return service.NewBotService(db)
+}
+
+// NewGroupService 创建群组服务Provider
+func NewGroupService(db *gorm.DB) service.GroupService {
+	return service.NewGroupService(db)
 }

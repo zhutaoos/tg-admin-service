@@ -1,8 +1,7 @@
-package admin_controller
+package admin
 
 import (
-	"app/internal/config"
-	"app/internal/model"
+	"app/internal/controller"
 	"app/internal/request"
 	"app/internal/service"
 	"app/tools/resp"
@@ -13,6 +12,7 @@ import (
 
 // AdminController 管理员控制器
 type AdminController struct {
+	controller.BaseController
 	adminService service.AdminService
 }
 
@@ -23,7 +23,6 @@ func NewAdminController(adminService service.AdminService) *AdminController {
 	}
 }
 
-// AdminLogin 管理员登录
 func (ac *AdminController) AdminLogin(ctx *gin.Context) {
 	var req request.AdminLoginRequest
 	if err := ctx.ShouldBind(&req); err != nil {
@@ -46,7 +45,6 @@ func (ac *AdminController) AdminLogin(ctx *gin.Context) {
 	(&resp.JsonResp{Code: resp.ReSuccess, Msg: "登录成功", Data: data}).Response()
 }
 
-// InitPwd 初始化密码
 func (ac *AdminController) InitPwd(ctx *gin.Context) {
 	var req request.InitPwdRequest
 	if err := ctx.ShouldBind(&req); err != nil {
@@ -66,9 +64,7 @@ func (ac *AdminController) InitPwd(ctx *gin.Context) {
 	(&resp.JsonResp{Code: resp.ReSuccess, Msg: "密码初始化成功", Data: string(hashedPassword)}).Response()
 }
 
-// Profile 获取用户信息
 func (ac *AdminController) Profile(ctx *gin.Context) {
-	user := ctx.MustGet(config.CurrentUser).(*model.Admin)
-
+	user := ac.CurrentUser(ctx)
 	resp.Ok(user)
 }

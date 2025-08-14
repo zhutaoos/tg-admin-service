@@ -1,4 +1,4 @@
-package evaluate_controller
+package evaluate
 
 import (
 	"app/internal/request"

@@ -1,6 +1,7 @@
-package controller
+package bot
 
 import (
+	"app/internal/controller"
 	"app/internal/request"
 	"app/internal/service"
 	"app/tools/resp"
@@ -9,6 +10,7 @@ import (
 )
 
 type BotController struct {
+	controller.BaseController
 	botService *service.BotService
 }
 
@@ -20,32 +22,29 @@ func NewBotController(botService *service.BotService) *BotController {
 
 // Bot Config Related Methods
 
-// CreateBotConfig creates a new bot configuration
 func (c *BotController) CreateBotConfig(ctx *gin.Context) {
 	var req request.CreateBotConfigRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
 		(&resp.JsonResp{Code: resp.ReFail, Msg: "参数错误: " + err.Error()}).Response()
 		return
 	}
-
-	err := c.botService.CreateBotConfig(ctx, req)
+	currentUserId := c.CurrentUserId(ctx)
+	err := c.botService.CreateBotConfig(ctx, req, currentUserId)
 	if err != nil {
 		(&resp.JsonResp{Code: resp.ReFail, Msg: "创建机器人配置失败: " + err.Error()}).Response()
 		return
 	}
-
 	(&resp.JsonResp{Code: resp.ReSuccess, Msg: "创建成功"}).Response()
 }
 
-// UpdateBotConfig updates bot configuration by group_id
 func (c *BotController) UpdateBotConfig(ctx *gin.Context) {
 	var req request.UpdateBotConfigRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
 		(&resp.JsonResp{Code: resp.ReFail, Msg: "参数错误: " + err.Error()}).Response()
 		return
 	}
-
-	err := c.botService.UpdateBotConfig(ctx, req)
+	currentUserId := c.CurrentUserId(ctx)
+	err := c.botService.UpdateBotConfig(ctx, req, currentUserId)
 	if err != nil {
 		(&resp.JsonResp{Code: resp.ReFail, Msg: "更新机器人配置失败: " + err.Error()}).Response()
 		return
@@ -54,15 +53,15 @@ func (c *BotController) UpdateBotConfig(ctx *gin.Context) {
 	(&resp.JsonResp{Code: resp.ReSuccess, Msg: "更新机器人配置成功"}).Response()
 }
 
-// GetBotConfig retrieves bot configuration by group_id
 func (c *BotController) GetBotConfig(ctx *gin.Context) {
 	var req request.GetBotConfigRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
 		(&resp.JsonResp{Code: resp.ReFail, Msg: "参数错误: " + err.Error()}).Response()
 		return
 	}
+	currentUserId := c.CurrentUserId(ctx)
 
-	configData, err := c.botService.GetBotConfigData(ctx, req.Id)
+	configData, err := c.botService.GetBotConfigData(ctx, req.Id, currentUserId)
 	if err != nil {
 		(&resp.JsonResp{Code: resp.ReFail, Msg: "获取机器人配置失败: " + err.Error()}).Response()
 		return
@@ -77,12 +76,29 @@ func (c *BotController) SearchBotConfig(ctx *gin.Context) {
 		(&resp.JsonResp{Code: resp.ReFail, Msg: "参数错误: " + err.Error()}).Response()
 		return
 	}
-	configData, err := c.botService.SearchBotConfig(ctx, req)
+	currentUserId := c.CurrentUserId(ctx)
+	configData, err := c.botService.SearchBotConfig(ctx, req, currentUserId)
 	if err != nil {
 		(&resp.JsonResp{Code: resp.ReFail, Msg: "获取机器人配置失败: " + err.Error()}).Response()
 		return
 	}
 	(&resp.JsonResp{Code: resp.ReSuccess, Msg: "获取机器人配置成功", Data: configData}).Response()
+}
+
+func (c *BotController) DelBotConfig(ctx *gin.Context) {
+	var req request.GetBotConfigRequest
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		(&resp.JsonResp{Code: resp.ReFail, Msg: "参数错误: " + err.Error()}).Response()
+		return
+	}
+
+	userId := c.CurrentUserId(ctx)
+	err := c.botService.DeleteBotConfig(ctx, req.Id, userId)
+	if err != nil {
+		(&resp.JsonResp{Code: resp.ReFail}).Response()
+		return
+	}
+	(&resp.JsonResp{Code: resp.ReSuccess, Msg: "获取机器人配置成功"}).Response()
 }
 
 // Bot Features Related Methods
@@ -108,7 +124,7 @@ func (c *BotController) SearchBotConfig(ctx *gin.Context) {
 // func (c *BotController) UpdateBotFeature(ctx *gin.Context) {
 // 	var req request.UpdateBotFeatureRequest
 // 	if err := ctx.ShouldBindJSON(&req); err != nil {
-// 		(&resp.JsonResp{Code: resp.ReFail, Msg: "参数错误: " + err.Error()}).Response()
+// 	(&resp.JsonResp{Code: resp.ReFail, Msg: "参数错误: " + err.Error()}).Response()
 // 		return
 // 	}
 
@@ -172,7 +188,6 @@ func (c *BotController) SearchBotConfig(ctx *gin.Context) {
 // 	(&resp.JsonResp{Code: resp.ReSuccess, Msg: "获取机器人功能列表成功", Data: features}).Response()
 // }
 
-// RegisterRoutes registers all bot related routes
 func (c *BotController) RegisterRoutes(router *gin.RouterGroup) {
 	bot := router.Group("/bot")
 	{

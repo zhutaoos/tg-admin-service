@@ -3,6 +3,7 @@ package service
 import (
 	"app/internal/model"
 	"app/internal/request"
+	"context"
 
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
@@ -14,6 +15,7 @@ type AdminService interface {
 	GetProfile(adminId int64) (*model.Admin, error)
 	InitPwd(req request.InitPwdRequest) error
 	GetAdminById(id int64, admin *model.Admin) error
+	GetAdminWithGroups(ctx context.Context, adminId int64) (*model.Admin, error)
 }
 
 // LoginResult 登录结果
@@ -24,18 +26,21 @@ type LoginResult struct {
 }
 
 type AdminServiceImpl struct {
-	db         *gorm.DB
-	tokenLogic TokenService
+	db          *gorm.DB
+	tokenLogic  TokenService
+	groupService GroupService
 }
 
 // NewAdminService 创建AdminService实例
 func NewAdminService(
 	db *gorm.DB,
 	tokenLogic TokenService,
+	groupService GroupService,
 ) AdminService {
 	return &AdminServiceImpl{
-		db:         db,
-		tokenLogic: tokenLogic,
+		db:          db,
+		tokenLogic:  tokenLogic,
+		groupService: groupService,
 	}
 }
 
@@ -73,11 +78,33 @@ func (as *AdminServiceImpl) Login(req request.AdminLoginRequest) (*LoginResult, 
 
 // GetProfile 获取管理员信息
 func (as *AdminServiceImpl) GetProfile(adminId int64) (*model.Admin, error) {
+	return as.GetAdminWithGroups(context.Background(), adminId)
+}
+
+// GetAdminWithGroups 获取管理员信息及其关联的群组
+func (as *AdminServiceImpl) GetAdminWithGroups(ctx context.Context, adminId int64) (*model.Admin, error) {
 	admin := &model.Admin{}
 	err := as.db.Where("id = ?", adminId).First(admin).Error
 	if err != nil {
 		return nil, err
 	}
+
+	// 获取管理员的群组信息
+	groups, err := as.groupService.GetGroupsByAdminID(ctx, int(adminId))
+	if err != nil {
+		return admin, nil // 即使没有群组信息也返回管理员基本信息
+	}
+
+	// 转换为 GroupInfo 格式
+	var groupInfos []model.GroupInfo
+	for _, group := range groups {
+		groupInfos = append(groupInfos, model.GroupInfo{
+			ID:   group.ID,
+			Name: group.Name,
+		})
+	}
+	admin.GroupInfo = groupInfos
+
 	return admin, nil
 }
 
