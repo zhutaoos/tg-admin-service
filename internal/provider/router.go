@@ -3,6 +3,7 @@ package provider
 import (
 	"app/internal/config"
 	admin_controller "app/internal/controller/admin"
+	group_controller "app/internal/controller/group"
 	controller "app/internal/controller/bot"
 	evaluate_controller "app/internal/controller/evaluate"
 	user_controller "app/internal/controller/user"
@@ -16,7 +17,7 @@ func NewAdminRoute(adminController *admin_controller.AdminController) *router.Ad
 }
 
 // NewGroupRoute 创建群组路由Provider
-func NewGroupRoute(groupController *admin_controller.GroupController) *router.GroupRoute {
+func NewGroupRoute(groupController *group_controller.GroupController) *router.GroupRoute {
 	return router.NewGroupRoute(groupController)
 }
 

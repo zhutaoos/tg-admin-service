@@ -114,8 +114,7 @@ func (router *Router) InitRoutes() {
 	router.AdminRoute.InitRoute(router.Engine)
 	
 	// 初始化群组路由
-	adminGroup := router.Engine.Group("/admin")
-	router.GroupRoute.InitRoute(adminGroup)
+	router.GroupRoute.InitRoute(router.Engine)
 	
 	router.UserRoute.InitRoute(router.Engine)
 	router.IndexRoute.InitRoute(router.Engine)

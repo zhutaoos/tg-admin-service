@@ -4,6 +4,7 @@ import (
 	"app/internal/controller/admin"
 	"app/internal/controller/bot"
 	"app/internal/controller/evaluate"
+	"app/internal/controller/group"
 	"app/internal/controller/user"
 
 	"go.uber.org/fx"
@@ -33,6 +34,7 @@ var ControllerModule = fx.Options(
 	fx.Provide(
 		admin.NewAdminController,
 		admin.NewGroupController,
+		group.NewGroupController,
 		user.NewUserController,
 		evaluate.NewEvaluateController,
 		bot.NewBotController,
