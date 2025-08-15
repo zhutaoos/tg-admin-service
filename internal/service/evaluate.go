@@ -4,7 +4,6 @@ import (
 	"app/internal/model"
 	"app/internal/request"
 	"app/internal/vo"
-	"errors"
 	"fmt"
 
 	"github.com/jinzhu/copier"
@@ -64,7 +63,7 @@ func (e *EvaluateServiceImpl) UpdateEvaluate(param request.EvaluateUpdateParam) 
 func (e *EvaluateServiceImpl) GetList(request request.EvaluateSearchRequest) (vo.PageResultVo[vo.JsEvaluateVo], error) {
 	groupIds := request.GroupIds
 	if len(groupIds) == 0 {
-		return vo.PageResultVo[vo.JsEvaluateVo]{}, errors.New("group_id is required")
+		return vo.PageResultVo[vo.JsEvaluateVo]{}, nil
 	}
 
 	var list []*model.JsEvaluateDB
