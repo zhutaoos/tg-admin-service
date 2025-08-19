@@ -9,7 +9,7 @@ import (
 
 type JsEvaluateDB struct {
 	Id               string         `redis:"id" json:"id" gorm:"primaryKey"`
-	GroupID          string         `redis:"group_id" json:"group_id" gorm:"column:group_id"`                               //群组id
+	GroupID          int64          `redis:"group_id" json:"group_id" gorm:"column:group_id"`                               //群组id
 	UserId           int64          `redis:"user_id" json:"user_id" gorm:"column:user_id"`                                  //js用户id
 	UserName         string         `redis:"user_name" json:"user_name" gorm:"column:user_name"`                            //js用户名称
 	NickName         string         `redis:"nick_name" json:"nick_name" gorm:"column:nick_name"`                            //js用户昵称
