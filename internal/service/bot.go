@@ -48,6 +48,7 @@ func (s *BotService) UpdateBotConfig(ctx context.Context, request request.Update
 	if err != nil {
 		return err
 	}
+	
 	var botConfig model.BotConfig
 	err = s.db.WithContext(ctx).Model(&model.BotConfig{}).Where("id = ?", request.Id).First(&botConfig).Error
 	if err != nil {
@@ -57,9 +58,23 @@ func (s *BotService) UpdateBotConfig(ctx context.Context, request request.Update
 		return bizErrors.ErrInvalidRequest
 	}
 
+	// 准备更新的字段
+	updates := map[string]interface{}{
+		"config": configJSON,
+	}
+
+	// 如果请求中包含 BotFeature，则更新 Features 字段
+	if request.BotFeature != nil {
+		featuresJSON, err := json.Marshal(request.BotFeature)
+		if err != nil {
+			return err
+		}
+		updates["features"] = featuresJSON
+	}
+
 	return s.db.WithContext(ctx).Model(&model.BotConfig{}).
 		Where("id = ?", request.Id).
-		Update("config", configJSON).Error
+		Updates(updates).Error
 }
 
 // GetBotConfig retrieves bot configuration by group_id
@@ -83,16 +98,37 @@ func (s *BotService) GetBotConfigData(ctx context.Context, id int64, userId uint
 		return nil, bizErrors.ErrInvalidRequest
 	}
 
-	var configData vo.BotConfigVo
-	err = json.Unmarshal(botConfig.Config, &configData)
+	// 解析基础配置数据
+	var requestData request.UpdateBotConfigRequest
+	err = json.Unmarshal(botConfig.Config, &requestData)
 	if err != nil {
 		return nil, err
 	}
-	configData.Id = botConfig.ID
-	configData.Region = botConfig.Region
-	configData.GroupID = botConfig.GroupID
 
-	return &configData, nil
+	// 构建响应数据
+	configData := &vo.BotConfigVo{
+		Id:               botConfig.ID,
+		Region:           botConfig.Region,
+		Name:             requestData.Name,
+		Token:            requestData.Token,
+		GroupID:          requestData.GroupID,
+		InviteLink:       requestData.InviteLink,
+		SubscribeChannel: requestData.SubscribeChannel,
+		GroupNamePrefix:  requestData.GroupNamePrefix,
+	}
+
+	// 解析 BotFeature 数据
+	if len(botConfig.Features) > 0 {
+		var botFeature vo.BotFeatureVo
+		err = json.Unmarshal(botConfig.Features, &botFeature)
+		if err != nil {
+			logger.Error("解析机器人功能配置数据失败，数据: %s, 错误: %s", string(botConfig.Features), err.Error())
+		} else {
+			configData.BotFeature = &botFeature
+		}
+	}
+
+	return configData, nil
 }
 
 func (s *BotService) DeleteBotConfig(ctx context.Context, id int64, userId uint) error {
@@ -137,6 +173,17 @@ func (s *BotService) SearchBotConfig(ctx context.Context, request request.Search
 		configData.Name = cfgData.Name
 		configData.GroupNamePrefix = cfgData.GroupNamePrefix
 		configData.CreateTime = botConfig.CreateTime.Format("2006-01-02 15:04:05")
+
+		// 解析 BotFeature 数据
+		if len(botConfig.Features) > 0 {
+			var botFeature vo.BotFeatureVo
+			err := json.Unmarshal(botConfig.Features, &botFeature)
+			if err != nil {
+				logger.Error("解析机器人功能配置数据失败错误信息: %s", err.Error())
+			} else {
+				configData.BotFeature = &botFeature
+			}
+		}
 
 		result = append(result, configData)
 	}

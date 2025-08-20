@@ -175,3 +175,4 @@ Standard Go containerization patterns apply.
 
 ### Queue Usage
 See README.md for detailed queue implementation examples using Redis Streams and ZSET for delay queues.
+- 默认用中文回复
