@@ -33,52 +33,51 @@ type SearchBotConfigRequest struct {
 
 // BotFeatureRequest 机器人功能配置请求
 type BotFeatureRequest struct {
-	Features FeaturesRequest `json:"features" binding:"required"`
-	Configs  ConfigsRequest  `json:"configs" binding:"required"`
+	Features FeaturesRequest `json:"features,omitempty"`
+	Configs  ConfigsRequest  `json:"configs,omitempty"`
 }
 
 // FeaturesRequest 功能开关配置
 type FeaturesRequest struct {
-	User UserFeatureRequest `json:"user" binding:"required"`
+	User UserFeatureRequest `json:"user,omitempty"`
 }
 
 // UserFeatureRequest 用户相关功能开关
 type UserFeatureRequest struct {
-	Mute      bool `json:"mute"`
-	Verify    bool `json:"verify"`
-	Subscribe bool `json:"subscribe"`
+	Mute      bool `json:"mute,omitempty"`
+	Verify    bool `json:"verify,omitempty"`
+	Subscribe bool `json:"subscribe,omitempty"`
 }
 
 // ConfigsRequest 功能详细配置
 type ConfigsRequest struct {
-	User UserConfigsRequest `json:"user" binding:"required"`
+	User UserConfigsRequest `json:"user,omitempty"`
 }
 
 // UserConfigsRequest 用户功能详细配置
 type UserConfigsRequest struct {
-	Mute      UserMuteConfig      `json:"mute"`
-	Verify    UserVerifyConfig    `json:"verify"`
-	Subscribe UserSubscribeConfig `json:"subscribe"`
+	Mute      *UserMuteConfig      `json:"mute,omitempty"`
+	Verify    *UserVerifyConfig    `json:"verify,omitempty"`
+	Subscribe *UserSubscribeConfig `json:"subscribe,omitempty"`
 }
 
 // UserMuteConfig 禁言功能配置
 type UserMuteConfig struct {
-	Enabled bool `json:"enabled"`
+	Enabled bool `json:"enabled,omitempty"`
 }
 
 // UserVerifyConfig 验证功能配置
 type UserVerifyConfig struct {
-	Enabled bool `json:"enabled"`
+	Enabled bool `json:"enabled,omitempty"`
 }
 
 // UserSubscribeConfig 订阅功能配置
 type UserSubscribeConfig struct {
-	Enabled    bool            `json:"enabled"`
-	ReplyItems []SubscribeItem `json:"replyItems"`
+	Enabled    bool            `json:"enabled,omitempty"`
+	ReplyItems []SubscribeItem `json:"replyItems,omitempty"`
 }
 
 // SubscribeItem 订阅项配置
 type SubscribeItem struct {
-	SubscribeUrl   string `json:"subscribeUrl" binding:"required"`
-	ForceSubscribe bool   `json:"forceSubscribe"`
+	SubscribeUrl string `json:"subscribeUrl" binding:"required"`
 }

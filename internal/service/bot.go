@@ -44,13 +44,8 @@ func (s *BotService) CreateBotConfig(ctx context.Context, request request.Create
 
 // UpdateBotConfig updates bot configuration by group_id
 func (s *BotService) UpdateBotConfig(ctx context.Context, request request.UpdateBotConfigRequest, userid uint) error {
-	configJSON, err := json.Marshal(request)
-	if err != nil {
-		return err
-	}
-	
 	var botConfig model.BotConfig
-	err = s.db.WithContext(ctx).Model(&model.BotConfig{}).Where("id = ?", request.Id).First(&botConfig).Error
+	err := s.db.WithContext(ctx).Model(&model.BotConfig{}).Where("id = ?", request.Id).First(&botConfig).Error
 	if err != nil {
 		return err
 	}
@@ -59,22 +54,20 @@ func (s *BotService) UpdateBotConfig(ctx context.Context, request request.Update
 	}
 
 	// 准备更新的字段
-	updates := map[string]interface{}{
-		"config": configJSON,
-	}
+	updates := map[string]interface{}{}
 
-	// 如果请求中包含 BotFeature，则更新 Features 字段
+	// 如果请求中包含 BotFeature，则只更新 Features 字段
 	if request.BotFeature != nil {
 		featuresJSON, err := json.Marshal(request.BotFeature)
 		if err != nil {
 			return err
 		}
 		updates["features"] = featuresJSON
+		return s.db.WithContext(ctx).Model(&model.BotConfig{}).
+			Where("id = ?", request.Id).
+			Updates(updates).Error
 	}
-
-	return s.db.WithContext(ctx).Model(&model.BotConfig{}).
-		Where("id = ?", request.Id).
-		Updates(updates).Error
+	return nil
 }
 
 // GetBotConfig retrieves bot configuration by group_id

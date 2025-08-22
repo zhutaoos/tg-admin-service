@@ -43,6 +43,13 @@ func (c *BotController) UpdateBotConfig(ctx *gin.Context) {
 		(&resp.JsonResp{Code: resp.ReFail, Msg: "参数错误: " + err.Error()}).Response()
 		return
 	}
+	
+	// 临时只允许更新 BotFeature 配置
+	if req.BotFeature == nil {
+		(&resp.JsonResp{Code: resp.ReFail, Msg: "当前只支持更新机器人功能配置"}).Response()
+		return
+	}
+	
 	currentUserId := c.CurrentUserId(ctx)
 	err := c.botService.UpdateBotConfig(ctx, req, currentUserId)
 	if err != nil {
