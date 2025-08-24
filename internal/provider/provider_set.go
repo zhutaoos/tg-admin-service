@@ -5,6 +5,7 @@ import (
 	"app/internal/controller/bot"
 	"app/internal/controller/evaluate"
 	"app/internal/controller/group"
+	"app/internal/controller/message"
 	"app/internal/controller/user"
 
 	"go.uber.org/fx"
@@ -26,6 +27,7 @@ var InfrastructureModule = fx.Options(
 		NewEvaluateService,
 		NewBotService,
 		NewGroupService,
+		NewMessageService,
 	),
 )
 
@@ -38,6 +40,7 @@ var ControllerModule = fx.Options(
 		user.NewUserController,
 		evaluate.NewEvaluateController,
 		bot.NewBotController,
+		message.NewMessageController,
 	),
 )
 
@@ -50,6 +53,7 @@ var RouterModule = fx.Options(
 		NewIndexRoute,
 		NewEvaluateRoute,
 		NewBotRoute,
+		NewMessageRoute,
 		NewRouter,
 	),
 )

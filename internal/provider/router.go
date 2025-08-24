@@ -6,6 +6,7 @@ import (
 	group_controller "app/internal/controller/group"
 	controller "app/internal/controller/bot"
 	evaluate_controller "app/internal/controller/evaluate"
+	message_controller "app/internal/controller/message"
 	user_controller "app/internal/controller/user"
 	"app/internal/router"
 	"app/internal/service"
@@ -43,6 +44,11 @@ func NewBotRoute(
 	return router.NewBotRoute(botController)
 }
 
+// NewMessageRoute 创建消息路由Provider
+func NewMessageRoute(messageController *message_controller.MessageController) *router.MessageRoute {
+	return router.NewMessageRoute(messageController)
+}
+
 // NewRouter 创建主路由Provider
 func NewRouter(
 	adminRoute *router.AdminRoute,
@@ -51,9 +57,10 @@ func NewRouter(
 	indexRoute *router.IndexRoute,
 	evaluateRoute *router.EvaluateRoute,
 	botRoute *router.BotRoute,
+	messageRoute *router.MessageRoute,
 	conf *config.Config,
 	tokenService service.TokenService,
 	adminService service.AdminService,
 ) *router.Router {
-	return router.NewRouter(adminRoute, groupRoute, userRoute, indexRoute, evaluateRoute, botRoute, conf, tokenService, adminService)
+	return router.NewRouter(adminRoute, groupRoute, userRoute, indexRoute, evaluateRoute, botRoute, messageRoute, conf, tokenService, adminService)
 }

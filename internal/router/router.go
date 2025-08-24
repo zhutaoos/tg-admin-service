@@ -22,6 +22,7 @@ type Router struct {
 	IndexRoute    *IndexRoute
 	EvaluateRoute *EvaluateRoute
 	BotRoute      *BotRoute
+	MessageRoute  *MessageRoute
 	Config        *config.Config
 	TokenService  service.TokenService
 	adminService  service.AdminService
@@ -35,6 +36,7 @@ func NewRouter(
 	indexRoute *IndexRoute,
 	evaluateRoute *EvaluateRoute,
 	botRoute *BotRoute,
+	messageRoute *MessageRoute,
 	conf *config.Config,
 	tokenService service.TokenService,
 	adminService service.AdminService,
@@ -46,6 +48,7 @@ func NewRouter(
 		IndexRoute:    indexRoute,
 		EvaluateRoute: evaluateRoute,
 		BotRoute:      botRoute,
+		MessageRoute:  messageRoute,
 		Config:        conf,
 		TokenService:  tokenService,
 		adminService:  adminService,
@@ -120,6 +123,7 @@ func (router *Router) InitRoutes() {
 	router.IndexRoute.InitRoute(router.Engine)
 	router.EvaluateRoute.InitRoute(router.Engine)
 	router.BotRoute.InitRoute(router.Engine)
+	router.MessageRoute.InitRoute(router.Engine)
 }
 
 // Run 启动服务器

@@ -40,3 +40,8 @@ func NewBotService(db *gorm.DB) *service.BotService {
 func NewGroupService(db *gorm.DB) service.GroupService {
 	return service.NewGroupService(db)
 }
+
+// NewMessageService 创建消息服务Provider
+func NewMessageService(db *gorm.DB) *service.MessageService {
+	return service.NewMessageService(db)
+}
