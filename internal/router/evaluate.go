@@ -20,7 +20,7 @@ func NewEvaluateRoute(evaluateController *evaluate_controller.EvaluateController
 
 // InitRoute 初始化首页路由
 func (ir *EvaluateRoute) InitRoute(engine *gin.Engine) {
-	ir.group = engine.Group("api/evaluate")
+	ir.group = engine.Group("/api/evaluate")
 
 	ir.group.POST("/list", ir.evaluateController.GetEvaluateList)
 	ir.group.POST("/update", ir.evaluateController.UpdateEvaluate)

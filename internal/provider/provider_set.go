@@ -4,6 +4,7 @@ import (
 	"app/internal/controller/admin"
 	"app/internal/controller/bot"
 	"app/internal/controller/evaluate"
+	"app/internal/controller/file"
 	"app/internal/controller/group"
 	"app/internal/controller/message"
 	"app/internal/controller/user"
@@ -28,6 +29,7 @@ var InfrastructureModule = fx.Options(
 		NewBotService,
 		NewGroupService,
 		NewMessageService,
+		NewFileService,
 	),
 )
 
@@ -41,6 +43,7 @@ var ControllerModule = fx.Options(
 		evaluate.NewEvaluateController,
 		bot.NewBotController,
 		message.NewMessageController,
+		file.NewFileController,
 	),
 )
 
@@ -54,6 +57,7 @@ var RouterModule = fx.Options(
 		NewEvaluateRoute,
 		NewBotRoute,
 		NewMessageRoute,
+		NewFileRoute,
 		NewRouter,
 	),
 )

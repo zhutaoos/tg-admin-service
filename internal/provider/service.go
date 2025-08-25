@@ -1,6 +1,7 @@
 package provider
 
 import (
+	"app/internal/config"
 	"app/internal/service"
 
 	"github.com/redis/go-redis/v9"
@@ -44,4 +45,9 @@ func NewGroupService(db *gorm.DB) service.GroupService {
 // NewMessageService 创建消息服务Provider
 func NewMessageService(db *gorm.DB) *service.MessageService {
 	return service.NewMessageService(db)
+}
+
+// NewFileService 创建文件服务Provider
+func NewFileService(config *config.Config) service.FileService {
+	return service.NewFileService(config)
 }

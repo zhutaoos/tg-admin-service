@@ -23,6 +23,7 @@ type Router struct {
 	EvaluateRoute *EvaluateRoute
 	BotRoute      *BotRoute
 	MessageRoute  *MessageRoute
+	FileRoute     *FileRoute
 	Config        *config.Config
 	TokenService  service.TokenService
 	adminService  service.AdminService
@@ -37,6 +38,7 @@ func NewRouter(
 	evaluateRoute *EvaluateRoute,
 	botRoute *BotRoute,
 	messageRoute *MessageRoute,
+	fileRoute *FileRoute,
 	conf *config.Config,
 	tokenService service.TokenService,
 	adminService service.AdminService,
@@ -49,6 +51,7 @@ func NewRouter(
 		EvaluateRoute: evaluateRoute,
 		BotRoute:      botRoute,
 		MessageRoute:  messageRoute,
+		FileRoute:     fileRoute,
 		Config:        conf,
 		TokenService:  tokenService,
 		adminService:  adminService,
@@ -101,9 +104,11 @@ func (router *Router) SetupEngine() *gin.Engine {
 
 	// JWT中间件白名单
 	whitelist := []string{
-		"/admin/login",      // 管理员登录
-		"/admin/initPwd",    // 初始化密码
-		"/api/index/health", // 健康检查
+		"/api/admin/login",   // 管理员登录
+		"/api/admin/initPwd", // 初始化密码
+		"/api/index/health",  // 健康检查
+		"/api/file/*",        // 文件访问（公开访问）
+		"/file/*",            // 文件直接访问（公开访问）
 	}
 	r.Use(middleware.JwtMiddlewareWithWhitelist(whitelist, router.TokenService, router.adminService))
 
@@ -115,15 +120,16 @@ func (router *Router) SetupEngine() *gin.Engine {
 func (router *Router) InitRoutes() {
 	// 初始化各个模块的路由
 	router.AdminRoute.InitRoute(router.Engine)
-	
+
 	// 初始化群组路由
 	router.GroupRoute.InitRoute(router.Engine)
-	
+
 	router.UserRoute.InitRoute(router.Engine)
 	router.IndexRoute.InitRoute(router.Engine)
 	router.EvaluateRoute.InitRoute(router.Engine)
 	router.BotRoute.InitRoute(router.Engine)
 	router.MessageRoute.InitRoute(router.Engine)
+	router.FileRoute.InitRoute(router.Engine)
 }
 
 // Run 启动服务器

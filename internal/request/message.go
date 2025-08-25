@@ -4,19 +4,19 @@ import "app/internal/model"
 
 // CreateMessageRequest 创建消息请求
 type CreateMessageRequest struct {
-	GroupIDs []int                    `json:"groupIds" binding:"required" validate:"required"` // 群组ID数组
-	Content  string                   `json:"content" validate:"required"`                     // 消息内容
-	Images   model.JSONStringSlice    `json:"images,omitempty"`                                // 图片列表
-	Medias   model.JSONStringSlice    `json:"medias,omitempty"`                                // 视频列表
+	GroupIDs []int                 `json:"groupIds" binding:"required" validate:"required"` // 群组ID数组
+	Content  string                `json:"content" validate:"required"`                     // 消息内容
+	Images   model.JSONFileSlice   `json:"images,omitempty"`                                // 图片列表
+	Medias   model.JSONFileSlice   `json:"medias,omitempty"`                                // 视频列表
 }
 
 // UpdateMessageRequest 更新消息请求
 type UpdateMessageRequest struct {
-	ID       uint                     `json:"id" binding:"required" validate:"required"` // 消息ID
-	GroupIDs []int                    `json:"groupIds,omitempty"`                         // 群组ID数组
-	Content  string                   `json:"content,omitempty"`                          // 消息内容
-	Images   model.JSONStringSlice    `json:"images,omitempty"`                           // 图片列表
-	Medias   model.JSONStringSlice    `json:"medias,omitempty"`                           // 视频列表
+	ID       uint                `json:"id" binding:"required" validate:"required"` // 消息ID
+	GroupIDs []int               `json:"groupIds,omitempty"`                         // 群组ID数组
+	Content  string              `json:"content,omitempty"`                          // 消息内容
+	Images   model.JSONFileSlice `json:"images,omitempty"`                           // 图片列表
+	Medias   model.JSONFileSlice `json:"medias,omitempty"`                           // 视频列表
 }
 
 // GetMessageRequest 获取消息请求

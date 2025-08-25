@@ -20,7 +20,7 @@ func NewGroupRoute(groupController *group_controller.GroupController) *GroupRout
 // InitRoute 初始化群组路由
 func (gr *GroupRoute) InitRoute(router *gin.Engine) {
 	// 群组管理路由
-	group := router.Group("/group")
+	group := router.Group("/api/group")
 	{
 		group.POST("/create", gr.groupController.CreateGroup)
 		group.POST("/update", gr.groupController.UpdateGroup)

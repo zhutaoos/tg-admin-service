@@ -6,6 +6,7 @@ import (
 	group_controller "app/internal/controller/group"
 	controller "app/internal/controller/bot"
 	evaluate_controller "app/internal/controller/evaluate"
+	file_controller "app/internal/controller/file"
 	message_controller "app/internal/controller/message"
 	user_controller "app/internal/controller/user"
 	"app/internal/router"
@@ -49,6 +50,11 @@ func NewMessageRoute(messageController *message_controller.MessageController) *r
 	return router.NewMessageRoute(messageController)
 }
 
+// NewFileRoute 创建文件路由Provider
+func NewFileRoute(fileController *file_controller.FileController) *router.FileRoute {
+	return router.NewFileRoute(fileController)
+}
+
 // NewRouter 创建主路由Provider
 func NewRouter(
 	adminRoute *router.AdminRoute,
@@ -58,9 +64,10 @@ func NewRouter(
 	evaluateRoute *router.EvaluateRoute,
 	botRoute *router.BotRoute,
 	messageRoute *router.MessageRoute,
+	fileRoute *router.FileRoute,
 	conf *config.Config,
 	tokenService service.TokenService,
 	adminService service.AdminService,
 ) *router.Router {
-	return router.NewRouter(adminRoute, groupRoute, userRoute, indexRoute, evaluateRoute, botRoute, messageRoute, conf, tokenService, adminService)
+	return router.NewRouter(adminRoute, groupRoute, userRoute, indexRoute, evaluateRoute, botRoute, messageRoute, fileRoute, conf, tokenService, adminService)
 }
