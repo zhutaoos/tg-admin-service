@@ -3,6 +3,7 @@ package vo
 // 机器人配置数据结构
 type BotConfigVo struct {
 	Id               uint          `json:"id"`
+	Type             int64         `json:"type"`
 	Region           string        `json:"region"`
 	Name             string        `json:"name"`                  // 机器人名称
 	Token            string        `json:"token"`                 // 机器人token
@@ -16,6 +17,7 @@ type BotConfigVo struct {
 // 机器人配置数据结构
 type BotConfigListVo struct {
 	Id              uint          `json:"id"`
+	Type            int64         `json:"type"`
 	Region          string        `json:"region"`
 	Name            string        `json:"name"`            // 机器人名称
 	GroupID         int64         `json:"groupId"`         // 群组ID

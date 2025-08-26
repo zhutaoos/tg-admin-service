@@ -2,6 +2,7 @@ package request
 
 type CreateBotConfigRequest struct {
 	Region           string `json:"region" binding:"required" validate:"required"`
+	Type             *int64 `json:"type" binding:"required" validate:"required"`
 	Name             string `json:"name" validate:"required"`                 // 机器人名称
 	Token            string `json:"token" validate:"required"`                // 机器人token
 	GroupID          int64  `json:"groupId" validate:"required"`              // 群组ID
@@ -28,6 +29,7 @@ type GetBotConfigRequest struct {
 type SearchBotConfigRequest struct {
 	GroupIds []string `json:"groupIds" binding:"required"`
 	Region   string   `json:"region"`
+	Type     *int64   `json:"type"`
 	PageRequest
 }
 

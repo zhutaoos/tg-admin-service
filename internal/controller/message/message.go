@@ -135,14 +135,3 @@ func (c *MessageController) DeleteMessage(ctx *gin.Context) {
 	(&resp.JsonResp{Code: resp.ReSuccess, Msg: "删除消息成功"}).Response()
 }
 
-// RegisterRoutes 注册路由
-func (c *MessageController) RegisterRoutes(router *gin.RouterGroup) {
-	message := router.Group("/message")
-	{
-		message.POST("/create", c.CreateMessage)
-		message.POST("/update", c.UpdateMessage)
-		message.POST("/get", c.GetMessage)
-		message.POST("/search", c.SearchMessages)
-		message.POST("/delete", c.DeleteMessage)
-	}
-}

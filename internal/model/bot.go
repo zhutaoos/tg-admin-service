@@ -10,6 +10,7 @@ import (
 type BotConfig struct {
 	ID         uint           `gorm:"primaryKey;autoIncrement"`
 	AdminId    uint           `gorm:"not null"`
+	Type       int64          `gorm:"not null"`
 	Region     string         `gorm:"not null"`
 	GroupID    int64          `gorm:"uniqueIndex;not null"`
 	Config     datatypes.JSON `gorm:"type:json column:config;default:{}"`

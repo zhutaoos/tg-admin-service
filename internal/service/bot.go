@@ -34,6 +34,7 @@ func (s *BotService) CreateBotConfig(ctx context.Context, request request.Create
 
 	botConfig := &model.BotConfig{
 		AdminId: userid,
+		Type:    *request.Type,
 		GroupID: request.GroupID,
 		Region:  request.Region,
 		Config:  configJSON,
@@ -101,6 +102,7 @@ func (s *BotService) GetBotConfigData(ctx context.Context, id int64, userId uint
 	// 构建响应数据
 	configData := &vo.BotConfigVo{
 		Id:               botConfig.ID,
+		Type:             botConfig.Type,
 		Region:           botConfig.Region,
 		Name:             requestData.Name,
 		Token:            requestData.Token,
@@ -139,6 +141,9 @@ func (s *BotService) SearchBotConfig(ctx context.Context, request request.Search
 	}
 	if request.Region != "" {
 		query = query.Where("region = ?", request.Region)
+	}
+	if request.Type != nil {
+		query = query.Where("type = ?", request.Type)
 	}
 	query.Where("admin_id = ?", userId)
 	err := query.Count(&total).Error

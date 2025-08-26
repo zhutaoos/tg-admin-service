@@ -7,15 +7,18 @@ import (
 )
 
 type Message struct {
-	ID         uint          `gorm:"primaryKey; type:INT NOT NULL AUTO_INCREMENT"`
-	AdminID    int           `gorm:"column:admin_id; type:INT; default:NULL"`
-	GroupID    int           `gorm:"column:group_id; type:INT; default:NULL; comment:'群组id,chatid'"`
-	Content    string        `gorm:"column:content; type:VARCHAR(2048); default:NULL; comment:'消息内容'"`
-	Images     JSONFileSlice `gorm:"column:images; type:JSON; default:NULL; comment:'图片'"`
-	Medias     JSONFileSlice `gorm:"column:medias; type:JSON; default:NULL; comment:'视频'"`
-	CreateTime *time.Time    `gorm:"column:create_time; type:DATETIME; default:NULL"`
-	UpdateTime *time.Time    `gorm:"column:update_time; type:DATETIME; default:NULL"`
-	Status     int           `gorm:"column:status; type:INT; default:0; comment:'是否删除 0:正常 1:删除'"`
+	ID            uint          `gorm:"primaryKey; type:INT NOT NULL AUTO_INCREMENT"`
+	AdminID       int           `gorm:"column:admin_id; type:INT; default:NULL"`
+	Content       string        `gorm:"column:content; type:VARCHAR(2048); default:NULL; comment:'消息内容'"`
+	Images        JSONFileSlice `gorm:"column:images; type:JSON; default:NULL; comment:'图片'"`
+	Medias        JSONFileSlice `gorm:"column:medias; type:JSON; default:NULL; comment:'视频'"`
+	AdNickname    *string       `gorm:"column:ad_nickname; type:VARCHAR(256); default:NULL; comment:'被推广人花名'"`
+	AdUserID      *int          `gorm:"column:ad_user_id; type:INT; default:NULL; comment:'被推广人用户id'"`
+	AdGroupLink   *string       `gorm:"column:ad_group_link; type:VARCHAR(256); default:NULL; comment:'被推广人群组链接'"`
+	AdChannelLink *string       `gorm:"column:ad_channel_link; type:VARCHAR(256); default:NULL; comment:'被推广人频道链接'"`
+	CreateTime    *time.Time    `gorm:"column:create_time; type:DATETIME; default:NULL"`
+	UpdateTime    *time.Time    `gorm:"column:update_time; type:DATETIME; default:NULL"`
+	Status        int           `gorm:"column:status; type:INT; default:0; comment:'是否删除 0:正常 1:删除'"`
 }
 
 func (Message) TableName() string {
@@ -48,12 +51,12 @@ func (j *JSONFileSlice) Scan(value interface{}) error {
 		*j = nil
 		return nil
 	}
-	
+
 	bytes, ok := value.([]byte)
 	if !ok {
 		return nil
 	}
-	
+
 	return json.Unmarshal(bytes, j)
 }
 
@@ -71,11 +74,11 @@ func (j *JSONStringSlice) Scan(value interface{}) error {
 		*j = nil
 		return nil
 	}
-	
+
 	bytes, ok := value.([]byte)
 	if !ok {
 		return nil
 	}
-	
+
 	return json.Unmarshal(bytes, j)
 }
