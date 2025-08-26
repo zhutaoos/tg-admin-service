@@ -8,6 +8,7 @@ import (
 	evaluate_controller "app/internal/controller/evaluate"
 	file_controller "app/internal/controller/file"
 	message_controller "app/internal/controller/message"
+	task_controller "app/internal/controller/task"
 	user_controller "app/internal/controller/user"
 	"app/internal/router"
 	"app/internal/service"
@@ -55,6 +56,11 @@ func NewFileRoute(fileController *file_controller.FileController) *router.FileRo
 	return router.NewFileRoute(fileController)
 }
 
+// NewTaskRoute 创建任务路由Provider
+func NewTaskRoute(taskController *task_controller.TaskController) *router.TaskRoute {
+	return router.NewTaskRoute(taskController)
+}
+
 // NewRouter 创建主路由Provider
 func NewRouter(
 	adminRoute *router.AdminRoute,
@@ -65,9 +71,10 @@ func NewRouter(
 	botRoute *router.BotRoute,
 	messageRoute *router.MessageRoute,
 	fileRoute *router.FileRoute,
+	taskRoute *router.TaskRoute,
 	conf *config.Config,
 	tokenService service.TokenService,
 	adminService service.AdminService,
 ) *router.Router {
-	return router.NewRouter(adminRoute, groupRoute, userRoute, indexRoute, evaluateRoute, botRoute, messageRoute, fileRoute, conf, tokenService, adminService)
+	return router.NewRouter(adminRoute, groupRoute, userRoute, indexRoute, evaluateRoute, botRoute, messageRoute, fileRoute, taskRoute, conf, tokenService, adminService)
 }

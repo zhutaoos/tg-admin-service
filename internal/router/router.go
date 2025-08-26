@@ -24,6 +24,7 @@ type Router struct {
 	BotRoute      *BotRoute
 	MessageRoute  *MessageRoute
 	FileRoute     *FileRoute
+	TaskRoute     *TaskRoute
 	Config        *config.Config
 	TokenService  service.TokenService
 	adminService  service.AdminService
@@ -39,6 +40,7 @@ func NewRouter(
 	botRoute *BotRoute,
 	messageRoute *MessageRoute,
 	fileRoute *FileRoute,
+	taskRoute *TaskRoute,
 	conf *config.Config,
 	tokenService service.TokenService,
 	adminService service.AdminService,
@@ -52,6 +54,7 @@ func NewRouter(
 		BotRoute:      botRoute,
 		MessageRoute:  messageRoute,
 		FileRoute:     fileRoute,
+		TaskRoute:     taskRoute,
 		Config:        conf,
 		TokenService:  tokenService,
 		adminService:  adminService,
@@ -130,6 +133,7 @@ func (router *Router) InitRoutes() {
 	router.BotRoute.InitRoute(router.Engine)
 	router.MessageRoute.InitRoute(router.Engine)
 	router.FileRoute.InitRoute(router.Engine)
+	router.TaskRoute.InitRoute(router.Engine)
 }
 
 // Run 启动服务器

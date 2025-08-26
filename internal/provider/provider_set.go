@@ -7,6 +7,7 @@ import (
 	"app/internal/controller/file"
 	"app/internal/controller/group"
 	"app/internal/controller/message"
+	"app/internal/controller/task"
 	"app/internal/controller/user"
 
 	"go.uber.org/fx"
@@ -30,6 +31,7 @@ var InfrastructureModule = fx.Options(
 		NewGroupService,
 		NewMessageService,
 		NewFileService,
+		NewTaskService,
 	),
 )
 
@@ -44,6 +46,7 @@ var ControllerModule = fx.Options(
 		bot.NewBotController,
 		message.NewMessageController,
 		file.NewFileController,
+		task.NewTaskController,
 	),
 )
 
@@ -58,6 +61,7 @@ var RouterModule = fx.Options(
 		NewBotRoute,
 		NewMessageRoute,
 		NewFileRoute,
+		NewTaskRoute,
 		NewRouter,
 	),
 )

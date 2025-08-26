@@ -51,3 +51,8 @@ func NewMessageService(db *gorm.DB) *service.MessageService {
 func NewFileService(config *config.Config) service.FileService {
 	return service.NewFileService(config)
 }
+
+// NewTaskService 创建任务服务Provider
+func NewTaskService(db *gorm.DB) service.TaskService {
+	return service.NewTaskService(db)
+}
