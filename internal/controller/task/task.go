@@ -152,17 +152,3 @@ func (tc *TaskController) TaskList(ctx *gin.Context) {
 	(&resp.JsonResp{Code: resp.ReSuccess, Msg: "获取任务列表成功", Data: data}).Response()
 }
 
-// TaskStats 任务统计
-func (tc *TaskController) TaskStats(ctx *gin.Context) {
-	// 获取当前用户ID
-	adminID := uint64(tc.CurrentUserId(ctx))
-
-	// 调用服务层获取任务统计
-	statsVO, err := tc.TaskService.GetTaskStats(adminID)
-	if err != nil {
-		(&resp.JsonResp{Code: resp.ReError, Msg: "获取任务统计失败: " + err.Error()}).Response()
-		return
-	}
-
-	(&resp.JsonResp{Code: resp.ReSuccess, Msg: "获取任务统计成功", Data: statsVO}).Response()
-}
