@@ -2,8 +2,56 @@ package vo
 
 import (
 	"app/internal/model"
+	"encoding/json"
 	"time"
 )
+
+// CustomTime 自定义时间类型，用于统一JSON输出格式
+type CustomTime struct {
+	time.Time
+}
+
+// MarshalJSON 自定义时间JSON序列化格式
+func (ct *CustomTime) MarshalJSON() ([]byte, error) {
+	if ct.Time.IsZero() {
+		return []byte("null"), nil
+	}
+	// 可以根据需要调整时间格式
+	// "2006-01-02 15:04:05" - 标准格式
+	// time.RFC3339 - ISO格式(当前使用)
+	formatted := ct.Time.Format("2006-01-02 15:04:05")
+	return json.Marshal(formatted)
+}
+
+// UnmarshalJSON 自定义时间JSON反序列化
+func (ct *CustomTime) UnmarshalJSON(data []byte) error {
+	var timeStr string
+	if err := json.Unmarshal(data, &timeStr); err != nil {
+		return err
+	}
+	
+	if timeStr == "" || timeStr == "null" {
+		ct.Time = time.Time{}
+		return nil
+	}
+	
+	// 支持多种时间格式解析
+	formats := []string{
+		"2006-01-02 15:04:05",
+		"2006-01-02T15:04:05Z07:00",
+		"2006-01-02T15:04:05Z",
+		"2006-01-02T15:04:05",
+	}
+	
+	var err error
+	for _, format := range formats {
+		if ct.Time, err = time.Parse(format, timeStr); err == nil {
+			return nil
+		}
+	}
+	
+	return err
+}
 
 // TaskVo 任务视图对象
 type TaskVo struct {
@@ -12,23 +60,23 @@ type TaskVo struct {
 	Description     string                  `json:"description"`
 	Status          int                     `json:"status"`
 	StatusText      string                  `json:"statusText"`
-	AdminID         uint64                  `json:"adminId"`
-	GroupIDs        []uint64                `json:"groupIds"`
+	AdminID         uint                    `json:"adminId"`
+	GroupIDs        []int64                 `json:"groupIds"`
 	MessageIDs      []uint64                `json:"messageIds"`
 	TriggerType     model.TriggerType       `json:"triggerType"`
 	TriggerTypeText string                  `json:"triggerTypeText"`
-	ScheduleTime    *time.Time              `json:"scheduleTime"`
+	ScheduleTime    *CustomTime             `json:"scheduleTime"`
 	CronExpression  string                  `json:"cronExpression"`
 	CronPatternType *model.CronPatternType  `json:"cronPatternType"`
 	CronConfig      map[string]interface{}  `json:"cronConfig"`
-	LastExecutedAt  *time.Time              `json:"lastExecutedAt"`
-	NextExecuteAt   *time.Time              `json:"nextExecuteAt"`
+	LastExecutedAt  *CustomTime             `json:"lastExecutedAt"`
+	NextExecuteAt   *CustomTime             `json:"nextExecuteAt"`
 	ExecuteCount    int                     `json:"executeCount"`
 	RetryCount      int                     `json:"retryCount"`
 	MaxRetryCount   int                     `json:"maxRetryCount"`
 	ErrorMessage    string                  `json:"errorMessage"`
-	CreateTime      time.Time               `json:"createTime"`
-	UpdateTime      time.Time               `json:"updateTime"`
+	CreateTime      CustomTime              `json:"createTime"`
+	UpdateTime      CustomTime              `json:"updateTime"`
 }
 
 // TaskListVo 任务列表视图对象

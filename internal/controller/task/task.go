@@ -5,7 +5,6 @@ import (
 	"app/internal/request"
 	"app/internal/service"
 	"app/tools/resp"
-	"strconv"
 
 	"github.com/gin-gonic/gin"
 )
@@ -32,7 +31,7 @@ func (tc *TaskController) CreateTask(ctx *gin.Context) {
 	}
 
 	// 获取当前用户ID
-	adminID := uint64(tc.CurrentUserId(ctx))
+	adminID := uint(tc.CurrentUserId(ctx))
 
 	// 调用服务层创建任务
 	taskVO, err := tc.TaskService.CreateTask(&req, adminID)
@@ -53,7 +52,7 @@ func (tc *TaskController) UpdateTask(ctx *gin.Context) {
 	}
 
 	// 获取当前用户ID
-	adminID := uint64(tc.CurrentUserId(ctx))
+	adminID := uint(tc.CurrentUserId(ctx))
 
 	// 调用服务层更新任务
 	taskVO, err := tc.TaskService.UpdateTask(&req, adminID)
@@ -67,23 +66,14 @@ func (tc *TaskController) UpdateTask(ctx *gin.Context) {
 
 // DeleteTask 删除任务
 func (tc *TaskController) DeleteTask(ctx *gin.Context) {
-	// 从URL参数获取任务ID
-	idStr := ctx.Param("id")
-	if idStr == "" {
-		(&resp.JsonResp{Code: resp.ReFail, Msg: "任务ID不能为空"}).Response()
+	var req request.DeleteTaskRequest
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		(&resp.JsonResp{Code: resp.ReFail, Msg: "参数缺失或格式错误: " + err.Error()}).Response()
 		return
 	}
-
-	id, err := strconv.ParseUint(idStr, 10, 64)
-	if err != nil {
-		(&resp.JsonResp{Code: resp.ReFail, Msg: "任务ID格式错误"}).Response()
-		return
-	}
-
-	req := request.DeleteTaskRequest{ID: id}
 
 	// 获取当前用户ID
-	adminID := uint64(tc.CurrentUserId(ctx))
+	adminID := uint(tc.CurrentUserId(ctx))
 
 	// 调用服务层删除任务
 	if err := tc.TaskService.DeleteTask(&req, adminID); err != nil {
@@ -96,24 +86,17 @@ func (tc *TaskController) DeleteTask(ctx *gin.Context) {
 
 // GetTaskDetail 获取任务详情
 func (tc *TaskController) GetTaskDetail(ctx *gin.Context) {
-	// 从URL参数获取任务ID
-	idStr := ctx.Param("id")
-	if idStr == "" {
-		(&resp.JsonResp{Code: resp.ReFail, Msg: "任务ID不能为空"}).Response()
-		return
-	}
-
-	id, err := strconv.ParseUint(idStr, 10, 64)
-	if err != nil {
-		(&resp.JsonResp{Code: resp.ReFail, Msg: "任务ID格式错误"}).Response()
+	var req request.GetTaskDetailRequest
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		(&resp.JsonResp{Code: resp.ReFail, Msg: "参数缺失或格式错误: " + err.Error()}).Response()
 		return
 	}
 
 	// 获取当前用户ID
-	adminID := uint64(tc.CurrentUserId(ctx))
+	adminID := uint(tc.CurrentUserId(ctx))
 
 	// 调用服务层获取任务详情
-	taskVO, err := tc.TaskService.GetTaskByID(id, adminID)
+	taskVO, err := tc.TaskService.GetTaskByID(req.ID, adminID)
 	if err != nil {
 		(&resp.JsonResp{Code: resp.ReError, Msg: "获取任务详情失败: " + err.Error()}).Response()
 		return
@@ -131,7 +114,7 @@ func (tc *TaskController) TaskList(ctx *gin.Context) {
 	}
 
 	// 获取当前用户ID
-	adminID := uint64(tc.CurrentUserId(ctx))
+	adminID := uint(tc.CurrentUserId(ctx))
 
 	// 调用服务层获取任务列表
 	taskListVO, err := tc.TaskService.ListTasks(&req, adminID)

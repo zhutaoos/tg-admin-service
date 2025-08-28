@@ -29,7 +29,7 @@ type Task struct {
 	TaskName        string          `json:"taskName" gorm:"type:VARCHAR(50) NOT NULL;comment:任务名称"`
 	Description     string          `json:"description" gorm:"type:TEXT;comment:任务描述"`
 	Status          int             `json:"status" gorm:"type:INT NOT NULL;default:0;comment:任务状态：0-待执行，1-执行中，2-已完成，3-执行失败"`
-	AdminID         uint64          `json:"adminId" gorm:"type:BIGINT NOT NULL;comment:创建者ID"`
+	AdminID         uint            `json:"adminId" gorm:"type:BIGINT NOT NULL;comment:创建者ID"`
 	GroupIDs        JSON            `json:"groupIds" gorm:"type:JSON NOT NULL;comment:群组ID列表，JSON格式存储"`
 	MessageIDs      JSON            `json:"messageIds" gorm:"type:JSON NOT NULL;comment:消息ID列表，JSON格式存储"`
 	TriggerType     TriggerType     `json:"triggerType" gorm:"type:ENUM('schedule','cron') NOT NULL;comment:触发类型：schedule-定时执行，cron-周期执行"`

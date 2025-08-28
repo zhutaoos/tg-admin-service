@@ -13,12 +13,12 @@ import (
 
 // TaskService 任务服务接口
 type TaskService interface {
-	CreateTask(req *request.CreateTaskRequest, adminID uint64) (*vo.TaskVo, error)
-	UpdateTask(req *request.UpdateTaskRequest, adminID uint64) (*vo.TaskVo, error)
-	DeleteTask(req *request.DeleteTaskRequest, adminID uint64) error
-	GetTaskByID(id uint64, adminID uint64) (*vo.TaskVo, error)
-	ListTasks(req *request.TaskListRequest, adminID uint64) (*vo.TaskListVo, error)
-	GetTaskStats(adminID uint64) (*vo.TaskStatsVo, error)
+	CreateTask(req *request.CreateTaskRequest, adminID uint) (*vo.TaskVo, error)
+	UpdateTask(req *request.UpdateTaskRequest, adminID uint) (*vo.TaskVo, error)
+	DeleteTask(req *request.DeleteTaskRequest, adminID uint) error
+	GetTaskByID(id uint64, adminID uint) (*vo.TaskVo, error)
+	ListTasks(req *request.TaskListRequest, adminID uint) (*vo.TaskListVo, error)
+	GetTaskStats(adminID uint) (*vo.TaskStatsVo, error)
 }
 
 type TaskServiceImpl struct {
@@ -33,9 +33,9 @@ func NewTaskService(db *gorm.DB) TaskService {
 }
 
 // CreateTask 创建任务
-func (t *TaskServiceImpl) CreateTask(req *request.CreateTaskRequest, adminID uint64) (*vo.TaskVo, error) {
+func (t *TaskServiceImpl) CreateTask(req *request.CreateTaskRequest, adminID uint) (*vo.TaskVo, error) {
 	// 参数验证
-	if req.TriggerType == model.TriggerTypeSchedule && req.ScheduleTime == nil {
+	if req.TriggerType == model.TriggerTypeSchedule && req.GetScheduleTime() == nil {
 		return nil, errors.New("定时执行类型必须指定执行时间")
 	}
 	if req.TriggerType == model.TriggerTypeCron && req.CronExpression == "" {
@@ -49,7 +49,7 @@ func (t *TaskServiceImpl) CreateTask(req *request.CreateTaskRequest, adminID uin
 		Status:          0, // 待执行
 		AdminID:         adminID,
 		TriggerType:     req.TriggerType,
-		ScheduleTime:    req.ScheduleTime,
+		ScheduleTime:    req.GetScheduleTime(),
 		CronExpression:  req.CronExpression,
 		CronPatternType: req.CronPatternType,
 		ExecuteCount:    0,
@@ -86,8 +86,8 @@ func (t *TaskServiceImpl) CreateTask(req *request.CreateTaskRequest, adminID uin
 	}
 
 	// 计算下次执行时间
-	if req.TriggerType == model.TriggerTypeSchedule && req.ScheduleTime != nil {
-		task.NextExecuteAt = req.ScheduleTime
+	if req.TriggerType == model.TriggerTypeSchedule && req.GetScheduleTime() != nil {
+		task.NextExecuteAt = req.GetScheduleTime()
 	}
 	// TODO: 对于Cron类型，需要根据表达式计算下次执行时间
 
@@ -101,7 +101,7 @@ func (t *TaskServiceImpl) CreateTask(req *request.CreateTaskRequest, adminID uin
 }
 
 // UpdateTask 更新任务
-func (t *TaskServiceImpl) UpdateTask(req *request.UpdateTaskRequest, adminID uint64) (*vo.TaskVo, error) {
+func (t *TaskServiceImpl) UpdateTask(req *request.UpdateTaskRequest, adminID uint) (*vo.TaskVo, error) {
 	// 查找任务
 	task := &model.Task{}
 	if err := t.db.Where("id = ? AND admin_id = ?", req.ID, adminID).First(task).Error; err != nil {
@@ -117,7 +117,7 @@ func (t *TaskServiceImpl) UpdateTask(req *request.UpdateTaskRequest, adminID uin
 	}
 
 	// 参数验证
-	if req.TriggerType == model.TriggerTypeSchedule && req.ScheduleTime == nil {
+	if req.TriggerType == model.TriggerTypeSchedule && req.GetScheduleTime() == nil {
 		return nil, errors.New("定时执行类型必须指定执行时间")
 	}
 	if req.TriggerType == model.TriggerTypeCron && req.CronExpression == "" {
@@ -129,7 +129,7 @@ func (t *TaskServiceImpl) UpdateTask(req *request.UpdateTaskRequest, adminID uin
 		"task_name":         req.TaskName,
 		"description":       req.Description,
 		"trigger_type":      req.TriggerType,
-		"schedule_time":     req.ScheduleTime,
+		"schedule_time":     req.GetScheduleTime(),
 		"cron_expression":   req.CronExpression,
 		"cron_pattern_type": req.CronPatternType,
 		"max_retry_count":   req.MaxRetryCount,
@@ -158,8 +158,8 @@ func (t *TaskServiceImpl) UpdateTask(req *request.UpdateTaskRequest, adminID uin
 	}
 
 	// 更新下次执行时间
-	if req.TriggerType == model.TriggerTypeSchedule && req.ScheduleTime != nil {
-		updates["next_execute_at"] = req.ScheduleTime
+	if req.TriggerType == model.TriggerTypeSchedule && req.GetScheduleTime() != nil {
+		updates["next_execute_at"] = req.GetScheduleTime()
 	}
 
 	// 执行更新
@@ -176,7 +176,7 @@ func (t *TaskServiceImpl) UpdateTask(req *request.UpdateTaskRequest, adminID uin
 }
 
 // DeleteTask 删除任务
-func (t *TaskServiceImpl) DeleteTask(req *request.DeleteTaskRequest, adminID uint64) error {
+func (t *TaskServiceImpl) DeleteTask(req *request.DeleteTaskRequest, adminID uint) error {
 	// 查找任务
 	task := &model.Task{}
 	if err := t.db.Where("id = ? AND admin_id = ?", req.ID, adminID).First(task).Error; err != nil {
@@ -196,7 +196,7 @@ func (t *TaskServiceImpl) DeleteTask(req *request.DeleteTaskRequest, adminID uin
 }
 
 // GetTaskByID 根据ID获取任务详情
-func (t *TaskServiceImpl) GetTaskByID(id uint64, adminID uint64) (*vo.TaskVo, error) {
+func (t *TaskServiceImpl) GetTaskByID(id uint64, adminID uint) (*vo.TaskVo, error) {
 	task := &model.Task{}
 	if err := t.db.Where("id = ? AND admin_id = ?", id, adminID).First(task).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -209,7 +209,7 @@ func (t *TaskServiceImpl) GetTaskByID(id uint64, adminID uint64) (*vo.TaskVo, er
 }
 
 // ListTasks 获取任务列表
-func (t *TaskServiceImpl) ListTasks(req *request.TaskListRequest, adminID uint64) (*vo.TaskListVo, error) {
+func (t *TaskServiceImpl) ListTasks(req *request.TaskListRequest, adminID uint) (*vo.TaskListVo, error) {
 	// 参数验证
 	if req.Page <= 0 {
 		req.Page = 1
@@ -267,7 +267,7 @@ func (t *TaskServiceImpl) ListTasks(req *request.TaskListRequest, adminID uint64
 }
 
 // GetTaskStats 获取任务统计信息
-func (t *TaskServiceImpl) GetTaskStats(adminID uint64) (*vo.TaskStatsVo, error) {
+func (t *TaskServiceImpl) GetTaskStats(adminID uint) (*vo.TaskStatsVo, error) {
 	stats := &vo.TaskStatsVo{}
 
 	// 总数
@@ -301,17 +301,25 @@ func (t *TaskServiceImpl) taskToVO(task *model.Task) *vo.TaskVo {
 		Status:          task.Status,
 		AdminID:         task.AdminID,
 		TriggerType:     task.TriggerType,
-		ScheduleTime:    task.ScheduleTime,
 		CronExpression:  task.CronExpression,
 		CronPatternType: task.CronPatternType,
-		LastExecutedAt:  task.LastExecutedAt,
-		NextExecuteAt:   task.NextExecuteAt,
 		ExecuteCount:    task.ExecuteCount,
 		RetryCount:      task.RetryCount,
 		MaxRetryCount:   task.MaxRetryCount,
 		ErrorMessage:    task.ErrorMessage,
-		CreateTime:      task.CreateTime,
-		UpdateTime:      task.UpdateTime,
+		CreateTime:      vo.CustomTime{Time: task.CreateTime},
+		UpdateTime:      vo.CustomTime{Time: task.UpdateTime},
+	}
+
+	// 转换时间字段
+	if task.ScheduleTime != nil {
+		taskVO.ScheduleTime = &vo.CustomTime{Time: *task.ScheduleTime}
+	}
+	if task.LastExecutedAt != nil {
+		taskVO.LastExecutedAt = &vo.CustomTime{Time: *task.LastExecutedAt}
+	}
+	if task.NextExecuteAt != nil {
+		taskVO.NextExecuteAt = &vo.CustomTime{Time: *task.NextExecuteAt}
 	}
 
 	// 设置状态和类型文本
@@ -320,7 +328,7 @@ func (t *TaskServiceImpl) taskToVO(task *model.Task) *vo.TaskVo {
 
 	// 解析JSON字段
 	if len(task.GroupIDs) > 0 {
-		var groupIDs []uint64
+		var groupIDs []int64
 		if err := json.Unmarshal(task.GroupIDs, &groupIDs); err == nil {
 			taskVO.GroupIDs = groupIDs
 		}

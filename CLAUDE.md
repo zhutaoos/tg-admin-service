@@ -176,3 +176,4 @@ Standard Go containerization patterns apply.
 ### Queue Usage
 See README.md for detailed queue implementation examples using Redis Streams and ZSET for delay queues.
 - 默认用中文回复
+- 请求默认都是post请求，返回的时间格式默认都是 2025-08-22 22:12:12 这样的格式
