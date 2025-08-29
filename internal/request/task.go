@@ -90,13 +90,11 @@ func (req *UpdateTaskRequest) GetScheduleTime() *time.Time {
 // TaskListRequest 任务列表请求
 type TaskListRequest struct {
 	PageRequest
-	Status    *int     `json:"status" form:"status"`
-	GroupID   *int64   `json:"groupId" form:"groupId"`
-	MessageID *uint64  `json:"messageId" form:"messageId"`
-	AdminID   *uint64  `json:"adminId" form:"adminId"`
-	TaskName  string   `json:"taskName" form:"taskName"`
-	StartTime string   `json:"startTime" form:"startTime"`
-	EndTime   string   `json:"endTime" form:"endTime"`
+	Status      *int                `json:"status" form:"status"`
+	TaskName    string              `json:"taskName" form:"taskName"`
+	TriggerType *model.TriggerType  `json:"triggerType" form:"triggerType"`
+	GroupIDs    []int64             `json:"groupIds" form:"groupIds"`
+	MessageIDs  []uint64            `json:"messageIds" form:"messageIds"`
 }
 
 // DeleteTaskRequest 删除任务请求

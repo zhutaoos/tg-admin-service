@@ -6,6 +6,7 @@ import (
 	"app/internal/vo"
 	"encoding/json"
 	"errors"
+	"strings"
 	"time"
 
 	"gorm.io/gorm"
@@ -230,17 +231,38 @@ func (t *TaskServiceImpl) ListTasks(req *request.TaskListRequest, adminID uint) 
 	if req.TaskName != "" {
 		query = query.Where("task_name LIKE ?", "%"+req.TaskName+"%")
 	}
-	if req.GroupID != nil {
-		query = query.Where("JSON_CONTAINS(group_ids, ?)", *req.GroupID)
+	if req.TriggerType != nil {
+		query = query.Where("trigger_type = ?", *req.TriggerType)
 	}
-	if req.MessageID != nil {
-		query = query.Where("JSON_CONTAINS(message_ids, ?)", *req.MessageID)
+	if len(req.GroupIDs) > 0 {
+		// 构建群组ID的OR条件，查询任务的group_ids字段中包含任意一个指定群组ID的记录
+		groupConditions := make([]string, 0, len(req.GroupIDs))
+		groupArgs := make([]interface{}, 0, len(req.GroupIDs))
+		for _, groupID := range req.GroupIDs {
+			groupConditions = append(groupConditions, "JSON_CONTAINS(group_ids, ?)")
+			// 将数值转换为JSON格式字符串
+			groupIDJSON, _ := json.Marshal(groupID)
+			groupArgs = append(groupArgs, string(groupIDJSON))
+		}
+		if len(groupConditions) > 0 {
+			groupQuery := "(" + strings.Join(groupConditions, " OR ") + ")"
+			query = query.Where(groupQuery, groupArgs...)
+		}
 	}
-	if req.StartTime != "" {
-		query = query.Where("create_time >= ?", req.StartTime)
-	}
-	if req.EndTime != "" {
-		query = query.Where("create_time <= ?", req.EndTime)
+	if len(req.MessageIDs) > 0 {
+		// 构建消息ID的OR条件，查询任务的message_ids字段中包含任意一个指定消息ID的记录
+		messageConditions := make([]string, 0, len(req.MessageIDs))
+		messageArgs := make([]interface{}, 0, len(req.MessageIDs))
+		for _, messageID := range req.MessageIDs {
+			messageConditions = append(messageConditions, "JSON_CONTAINS(message_ids, ?)")
+			// 将数值转换为JSON格式字符串
+			messageIDJSON, _ := json.Marshal(messageID)
+			messageArgs = append(messageArgs, string(messageIDJSON))
+		}
+		if len(messageConditions) > 0 {
+			messageQuery := "(" + strings.Join(messageConditions, " OR ") + ")"
+			query = query.Where(messageQuery, messageArgs...)
+		}
 	}
 
 	// 获取总数

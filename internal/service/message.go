@@ -76,6 +76,18 @@ func (s *MessageService) UpdateMessage(ctx context.Context, req request.UpdateMe
 	if req.Medias != nil {
 		updates["medias"] = req.Medias
 	}
+	if req.AdNickname != nil {
+		updates["ad_nickname"] = req.AdNickname
+	}
+	if req.AdUserID != nil {
+		updates["ad_user_id"] = req.AdUserID
+	}
+	if req.AdGroupLink != nil {
+		updates["ad_group_link"] = req.AdGroupLink
+	}
+	if req.AdChannelLink != nil {
+		updates["ad_channel_link"] = req.AdChannelLink
+	}
 
 	return s.db.WithContext(ctx).Model(&model.Message{}).
 		Where("id = ? AND status = 0", req.ID).
