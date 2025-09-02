@@ -1,11 +1,15 @@
 package service
 
 import (
+	"app/internal/job"
 	"app/internal/model"
 	"app/internal/request"
 	"app/internal/vo"
+	"app/tools/cron"
+	"app/tools/logger"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 
@@ -23,13 +27,17 @@ type TaskService interface {
 }
 
 type TaskServiceImpl struct {
-	db *gorm.DB
+	db         *gorm.DB
+	cronUtils  *cron.CronUtils
+	jobService *job.JobService
 }
 
 // NewTaskService 创建TaskService实例
-func NewTaskService(db *gorm.DB) TaskService {
+func NewTaskService(db *gorm.DB, jobService *job.JobService) TaskService {
 	return &TaskServiceImpl{
-		db: db,
+		db:         db,
+		cronUtils:  cron.NewCronUtils(),
+		jobService: jobService,
 	}
 }
 
@@ -41,6 +49,13 @@ func (t *TaskServiceImpl) CreateTask(req *request.CreateTaskRequest, adminID uin
 	}
 	if req.TriggerType == model.TriggerTypeCron && req.CronExpression == "" {
 		return nil, errors.New("周期执行类型必须指定Cron表达式")
+	}
+
+	// 验证 Cron 表达式
+	if req.TriggerType == model.TriggerTypeCron {
+		if valid, errMsg := t.cronUtils.ValidateCronExpression(req.CronExpression); !valid {
+			return nil, errors.New("Cron表达式格式错误: " + errMsg)
+		}
 	}
 
 	// 构建任务模型
@@ -89,14 +104,26 @@ func (t *TaskServiceImpl) CreateTask(req *request.CreateTaskRequest, adminID uin
 	// 计算下次执行时间
 	if req.TriggerType == model.TriggerTypeSchedule && req.GetScheduleTime() != nil {
 		task.NextExecuteAt = req.GetScheduleTime()
+	} else if req.TriggerType == model.TriggerTypeCron && req.CronExpression != "" {
+		// 计算 Cron 类型任务的下次执行时间
+		nextTime, err := t.cronUtils.CalculateNextExecution(req.CronExpression, time.Now())
+		if err != nil {
+			return nil, errors.New("计算下次执行时间失败: " + err.Error())
+		}
+		task.NextExecuteAt = nextTime
 	}
-	// TODO: 对于Cron类型，需要根据表达式计算下次执行时间
 
 	// 保存任务
 	if err := t.db.Create(task).Error; err != nil {
 		return nil, err
 	}
-
+	jobBotMsgPayload := &job.BotMsgPayload{Content: fmt.Sprintf("任务创建成功，任务ID：%d", task.ID)}
+	_, err1 := t.jobService.AddCronTask(task.CronExpression, job.BotMsgType, jobBotMsgPayload)
+	t.jobService.AddTestCronTask()
+	t.jobService.TriggerImmediateTask()
+	if err1 != nil {
+		logger.Error("添加定时任务失败", "error", err1)
+	}
 	// 转换为VO
 	return t.taskToVO(task), nil
 }
@@ -123,6 +150,13 @@ func (t *TaskServiceImpl) UpdateTask(req *request.UpdateTaskRequest, adminID uin
 	}
 	if req.TriggerType == model.TriggerTypeCron && req.CronExpression == "" {
 		return nil, errors.New("周期执行类型必须指定Cron表达式")
+	}
+
+	// 验证 Cron 表达式
+	if req.TriggerType == model.TriggerTypeCron {
+		if valid, errMsg := t.cronUtils.ValidateCronExpression(req.CronExpression); !valid {
+			return nil, errors.New("Cron表达式格式错误: " + errMsg)
+		}
 	}
 
 	// 更新字段
@@ -161,6 +195,13 @@ func (t *TaskServiceImpl) UpdateTask(req *request.UpdateTaskRequest, adminID uin
 	// 更新下次执行时间
 	if req.TriggerType == model.TriggerTypeSchedule && req.GetScheduleTime() != nil {
 		updates["next_execute_at"] = req.GetScheduleTime()
+	} else if req.TriggerType == model.TriggerTypeCron && req.CronExpression != "" {
+		// 计算 Cron 类型任务的下次执行时间
+		nextTime, err := t.cronUtils.CalculateNextExecution(req.CronExpression, time.Now())
+		if err != nil {
+			return nil, errors.New("计算下次执行时间失败: " + err.Error())
+		}
+		updates["next_execute_at"] = nextTime
 	}
 
 	// 执行更新

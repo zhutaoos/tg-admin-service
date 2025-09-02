@@ -112,14 +112,18 @@ func Trace() string {
 
 func Debug(msg string, append ...any) {
 	if infoFileHandel != nil {
-		logHandel := slog.New(slog.NewTextHandler(infoFileHandel, nil))
+		// 创建多重写入器：同时写入文件和控制台
+		multiWriter := io.MultiWriter(infoFileHandel, os.Stdout)
+		logHandel := slog.New(slog.NewTextHandler(multiWriter, nil))
 		slog.SetDefault(logHandel)
 		slog.Debug(msg, append...)
 	}
 }
 
 func System(msg string, append ...any) {
-	logHandel := slog.New(slog.NewTextHandler(systemFileHandel, nil))
+	// 创建多重写入器：同时写入文件和控制台
+	multiWriter := io.MultiWriter(systemFileHandel, os.Stdout)
+	logHandel := slog.New(slog.NewTextHandler(multiWriter, nil))
 	slog.SetDefault(logHandel)
 	slog.Info(msg, append...)
 }
@@ -127,7 +131,9 @@ func System(msg string, append ...any) {
 func Error(msg string, appends ...any) {
 	t := Trace()
 	if errFileHandel != nil {
-		logHandel := slog.New(slog.NewTextHandler(errFileHandel, nil))
+		// 创建多重写入器：同时写入文件和标准错误输出
+		multiWriter := io.MultiWriter(errFileHandel, os.Stderr)
+		logHandel := slog.New(slog.NewTextHandler(multiWriter, nil))
 		slog.SetDefault(logHandel)
 		n := append([]any{"trace", t}, appends...)
 		slog.Error(msg, n...)

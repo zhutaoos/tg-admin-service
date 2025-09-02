@@ -7,7 +7,8 @@
       "Bash(go test:*)",
       "Bash(rm:*)",
       "Bash(curl:*)",
-      "Bash(go run:*)"
+      "Bash(go run:*)",
+      "Bash(pkill:*)"
     ],
     "deny": []
   }

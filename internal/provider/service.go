@@ -2,6 +2,7 @@ package provider
 
 import (
 	"app/internal/config"
+	"app/internal/job"
 	"app/internal/service"
 
 	"github.com/redis/go-redis/v9"
@@ -53,6 +54,6 @@ func NewFileService(config *config.Config) service.FileService {
 }
 
 // NewTaskService 创建任务服务Provider
-func NewTaskService(db *gorm.DB) service.TaskService {
-	return service.NewTaskService(db)
+func NewTaskService(db *gorm.DB, jobService *job.JobService) service.TaskService {
+	return service.NewTaskService(db, jobService)
 }
