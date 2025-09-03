@@ -30,7 +30,7 @@ func (b *BotMsgHandler) TaskType() string {
 
 func (b *BotMsgHandler) Process(ctx context.Context, payload []byte) error {
 	logger.System("BotMsgHandler开始处理任务", "执行时间", time.Now().Format("2006-01-02 15:04:05"), "payload", string(payload))
-	
+
 	var botMsg BotMsgPayload
 	if err := json.Unmarshal(payload, &botMsg); err != nil {
 		logger.Error("BotMsgHandler 反序列化失败", "error", err, "payload", string(payload))
