@@ -8,7 +8,10 @@
       "Bash(rm:*)",
       "Bash(curl:*)",
       "Bash(go run:*)",
-      "Bash(pkill:*)"
+      "Bash(pkill:*)",
+      "Bash(timeout:*)",
+      "Bash(redis-cli:*)",
+      "Bash(chmod:*)"
     ],
     "deny": []
   }

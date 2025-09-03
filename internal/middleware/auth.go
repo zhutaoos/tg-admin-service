@@ -5,7 +5,6 @@ import (
 	"app/internal/model"
 	"app/internal/service"
 	"app/tools/resp"
-	"log"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -16,9 +15,7 @@ func JwtMiddlewareWithWhitelist(whitelist []string, tokenService service.TokenSe
 	return func(c *gin.Context) {
 		// 检查当前请求路径是否在白名单中
 		currentPath := c.Request.URL.Path
-		log.Println("请求url", currentPath)
 		for _, path := range whitelist {
-
 			// 支持精确匹配
 			if currentPath == path {
 				c.Next()

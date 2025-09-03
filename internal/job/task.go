@@ -58,14 +58,27 @@ func NewJobService(redisConf *config.RedisConf, lc fx.Lifecycle) *JobService {
 		DB:       redisConf.Db,
 		PoolSize: redisConf.MaxTotal,
 	}
+
+	// 创建客户端并测试连接
 	ts.client = asynq.NewClient(redisOpt)
 	ts.redisConf = redisConf
 
 	// 初始化调度器，设置时区为上海时间
 	location, err := time.LoadLocation("Asia/Shanghai")
 	if err != nil {
+		logger.System("无法加载Asia/Shanghai时区，使用备选方案", "error", err)
 		location = time.FixedZone("Asia/Shanghai", 8*60*60) // 备选方案
 	}
+
+	// 记录时区配置信息
+	now := time.Now()
+	nowInLocation := now.In(location)
+	logger.System("时区配置详情",
+		"系统时间", now.Format("2006-01-02 15:04:05"),
+		"系统时区", now.Location().String(),
+		"调度器时区", location.String(),
+		"调度器时区时间", nowInLocation.Format("2006-01-02 15:04:05"),
+		"时区偏移", location.String())
 	schedulerOpt := &asynq.SchedulerOpts{
 		Location: location,
 	}
@@ -74,28 +87,51 @@ func NewJobService(redisConf *config.RedisConf, lc fx.Lifecycle) *JobService {
 	// FX 生命周期管理
 	lc.Append(fx.Hook{
 		OnStart: func(ctx context.Context) error {
-			// 先启动 Worker
-			if err := ts.StartWorker(); err != nil {
-				logger.System("任务服务启动失败", "error", err)
-				return err
-			}
+			// 异步启动 Worker (避免阻塞)
+			go func() {
+				logger.System("正在启动 Worker...")
+				if err := ts.StartWorker(); err != nil {
+					logger.System("任务服务启动失败", "error", err)
+				}
+			}()
 
-			// 等待一小段时间确保 Worker 完全启动
+			// 等待 Worker 启动
+			time.Sleep(200 * time.Millisecond)
+
+			// 异步启动 Scheduler
+			go func() {
+				logger.System("正在启动调度器...")
+
+				if err := ts.scheduler.Start(); err != nil {
+					logger.System("调度器启动失败", "error", err)
+				} else {
+					logger.System("调度器启动成功", "当前时间", time.Now().Format("2006-01-02 15:04:05"))
+				}
+			}()
+
+			// 等待调度器启动
 			time.Sleep(100 * time.Millisecond)
 
-			// 再启动 Scheduler
-			if err := ts.scheduler.Start(); err != nil {
-				logger.System("调度器启动失败", "error", err)
-				return err
+			logger.System("任务服务启动成功", "当前时间", time.Now().Format("2006-01-02 15:04:05"), "时区", time.Now().Location().String())
+			logger.System("已注册的任务处理器数量", "count", len(ts.handlers))
+			for taskType := range ts.handlers {
+				logger.System("已注册任务类型", "taskType", taskType)
 			}
-
-			logger.System("任务服务和调度器启动成功", "当前时间", time.Now().Format("2006-01-02 15:04:05"), "时区", time.Now().Location().String())
 			return nil
 		},
 		OnStop: func(ctx context.Context) error {
-			logger.System("任务服务停止")
-			ts.scheduler.Shutdown()
+			logger.System("任务服务停止中...")
+
+			// 先停止调度器，避免新任务入队
+			if ts.scheduler != nil {
+				ts.scheduler.Shutdown()
+				logger.System("调度器已停止")
+			}
+
+			// 再停止 Worker，处理完剩余任务
 			ts.Stop()
+
+			logger.System("任务服务已完全停止")
 			return nil
 		},
 	})
@@ -128,8 +164,15 @@ func (ts *JobService) StartWorker() error {
 	mux := asynq.NewServeMux()
 	mux.HandleFunc("*", ts.processTask)
 
-	logger.System("Starting asynq worker with concurrency: %d", concurrency)
-	return ts.server.Start(mux)
+	logger.System("启动 asynq worker", "concurrency", concurrency, "redisAddr", redisAddr)
+
+	// 这是阻塞调用，会一直运行直到服务停止
+	err := ts.server.Start(mux)
+	if err != nil {
+		logger.System("asynq worker 启动失败", "error", err)
+		return err
+	}
+	return nil
 }
 
 // Stop 停止任务服务
@@ -158,8 +201,14 @@ func (ts *JobService) RegisterHandler(handler JobHandler) {
 	if taskType == "" {
 		panic("task type cannot be empty")
 	}
+
+	// 检查是否重复注册
+	if _, exists := ts.handlers[taskType]; exists {
+		logger.System("警告: 任务类型 %s 已经注册，将覆盖原有 Handler", taskType)
+	}
+
 	ts.handlers[taskType] = handler
-	logger.System("Registered task handler: %s", taskType)
+	logger.System("注册任务处理器成功", "taskType", taskType)
 }
 
 // GetHandler 获取任务处理器
@@ -174,130 +223,87 @@ func (ts *JobService) GetHandler(taskType string) (JobHandler, bool) {
 // processTask 统一任务处理函数
 func (ts *JobService) processTask(ctx context.Context, task *asynq.Task) error {
 	taskType := task.Type()
+	startTime := time.Now()
 
 	handler, ok := ts.GetHandler(taskType)
 	if !ok {
-		logger.Error("no handler registered for task type", "taskType", taskType)
+		logger.Error("没有找到任务处理器", "taskType", taskType)
 		return fmt.Errorf("no handler registered for task type: %s", taskType)
 	}
 
-	logger.System("Processing task: %s, payload: %s", taskType, string(task.Payload()))
-	return handler.Process(ctx, task.Payload())
+	logger.System("开始处理任务", "taskType", taskType, "payload", string(task.Payload()), "开始时间", startTime.Format("2006-01-02 15:04:05"))
+
+	err := handler.Process(ctx, task.Payload())
+	duration := time.Since(startTime)
+
+	if err != nil {
+		logger.System("任务处理失败", "taskType", taskType, "error", err, "耗时", duration.String())
+		return err
+	}
+
+	logger.System("任务处理成功", "taskType", taskType, "耗时", duration.String())
+	return nil
 }
 
 // EnqueueTask 添加任务到队列
-func (ts *JobService) EnqueueTask(taskType string, payload any) (*asynq.TaskInfo, error) {
+func (ts *JobService) EnqueueTask(taskType string, payload string) (*asynq.TaskInfo, error) {
 	if ts.client == nil {
 		return nil, fmt.Errorf("client not initialized")
 	}
 
-	data, err := json.Marshal(payload)
-	if err != nil {
-		return nil, fmt.Errorf("marshal payload failed: %w", err)
-	}
-
-	task := asynq.NewTask(taskType, data)
+	task := asynq.NewTask(taskType, []byte(payload))
 	return ts.client.Enqueue(task)
 }
 
 // ScheduleTask 计划任务
-func (ts *JobService) ScheduleTask(taskType string, payload any, processAt time.Time) (*asynq.TaskInfo, error) {
+func (ts *JobService) ScheduleTask(taskType string, payload string, processAt time.Time) (*asynq.TaskInfo, error) {
 	if ts.client == nil {
 		return nil, fmt.Errorf("client not initialized")
 	}
 
-	data, err := json.Marshal(payload)
-	if err != nil {
-		return nil, fmt.Errorf("marshal payload failed: %w", err)
-	}
-
-	task := asynq.NewTask(taskType, data)
+	task := asynq.NewTask(taskType, []byte(payload))
 	return ts.client.Enqueue(task, asynq.ProcessAt(processAt))
 }
 
 // AddCronTask 添加周期性任务
-func (ts *JobService) AddCronTask(cronExpr, taskType string, payload any) (string, error) {
+func (ts *JobService) AddCronTask(cronExpr, taskType string, payload string) (string, error) {
 	if ts.scheduler == nil {
 		return "", fmt.Errorf("scheduler not initialized")
 	}
 
-	// 转换cron表达式格式
-	convertedCronExpr, err := convertCronExpr(cronExpr)
-	if err != nil {
-		return "", fmt.Errorf("cron表达式格式错误: %w", err)
+	logger.System("准备注册周期任务",
+		"cronExpr", cronExpr,
+		"taskType", taskType,
+		"当前时间", time.Now().Format("2006-01-02 15:04:05"),
+		"调度器时区", "Asia/Shanghai")
+
+	// 验证 cron 表达式格式（应该是5字段）
+	fields := strings.Fields(cronExpr)
+	if len(fields) != 5 {
+		return "", fmt.Errorf("cron表达式格式错误: 期望5字段格式 '分 时 日 月 周'，实际%d字段: %s", len(fields), cronExpr)
 	}
 
-	// 分析cron表达式，计算下次执行时间
-	nextRunTime, err := calculateNextRunTime(convertedCronExpr)
+	task := asynq.NewTask(taskType, []byte(payload))
+	logger.System("正在注册周期任务到调度器", "cronExpr", cronExpr, "taskType", taskType)
+	entryID, err := ts.scheduler.Register(cronExpr, task)
 	if err != nil {
-		logger.System("警告: 无法计算下次执行时间", "error", err)
-	} else {
-		logger.System("计算的下次执行时间", "nextRun", nextRunTime.Format("2006-01-02 15:04:05"))
-	}
-
-	data, err := json.Marshal(payload)
-	if err != nil {
-		return "", fmt.Errorf("marshal payload failed: %w", err)
-	}
-
-	task := asynq.NewTask(taskType, data)
-	entryID, err := ts.scheduler.Register(convertedCronExpr, task)
-	if err != nil {
+		logger.System("注册周期任务失败", "error", err, "cronExpr", cronExpr, "taskType", taskType)
 		return "", fmt.Errorf("register periodic task failed: %w", err)
 	}
 
-	logger.System("注册周期任务成功", "原始表达式", cronExpr, "转换后表达式", convertedCronExpr, "taskType", taskType, "entryID", entryID)
+	logger.System("注册周期任务成功", "cronExpr", cronExpr, "taskType", taskType, "entryID", entryID)
 
 	// 验证 Handler 是否已注册
 	if _, ok := ts.GetHandler(taskType); !ok {
-		logger.System("警告: 任务类型 %s 没有对应的 Handler", taskType)
+		logger.System("错误: 任务类型 %s 没有对应的 Handler，cron 任务将无法执行", taskType)
+		// 移除刚注册的任务
+		ts.scheduler.Unregister(entryID)
+		return "", fmt.Errorf("no handler registered for task type: %s", taskType)
 	}
 
 	return entryID, nil
 }
 
-// convertCronExpr 转换cron表达式格式
-// 输入：6字段格式 "秒 分 时 日 月 周"
-// 输出：5字段格式 "分 时 日 月 周"
-func convertCronExpr(cronExpr string) (string, error) {
-	fields := strings.Fields(cronExpr)
-
-	// 如果已经是5字段，直接返回
-	if len(fields) == 5 {
-		return cronExpr, nil
-	}
-
-	// 如果是6字段，去掉第一个字段（秒）
-	if len(fields) == 6 {
-		// 检查秒字段是否为0，如果不是0，给出警告
-		if fields[0] != "0" {
-			logger.System("警告: cron表达式中的秒字段 '%s' 将被忽略，asynq只支持分钟级精度", fields[0])
-		}
-		return strings.Join(fields[1:], " "), nil
-	}
-
-	return "", fmt.Errorf("不支持的cron表达式格式，期望5字段或6字段，实际%d字段: %s", len(fields), cronExpr)
-}
-
-// calculateNextRunTime 计算cron表达式的下次执行时间（简单实现用于调试）
-func calculateNextRunTime(cronExpr string) (time.Time, error) {
-	fields := strings.Fields(cronExpr)
-	if len(fields) != 5 {
-		return time.Time{}, fmt.Errorf("invalid cron expression")
-	}
-
-	now := time.Now()
-	// 这里只做简单的时间计算，主要用于调试
-	// 实际的cron解析比较复杂，asynq内部会处理
-
-	// 如果指定了具体的月份和日期
-	if fields[2] != "*" && fields[3] != "*" {
-		logger.System("检测到具体日期的cron表达式", "日", fields[2], "月", fields[3])
-	}
-
-	// 返回一个示例时间用于日志显示
-	return now.Add(time.Minute), nil
-}
 
 // RemoveCronTask 移除周期性任务
 func (ts *JobService) RemoveCronTask(entryID string) error {
@@ -312,6 +318,15 @@ func (ts *JobService) RemoveCronTask(entryID string) error {
 
 	logger.System("移除周期任务成功", "entryID", entryID)
 	return nil
+}
+
+// CreateJSONPayload 创建JSON格式的payload字符串
+func CreateJSONPayload(data interface{}) (string, error) {
+	jsonData, err := json.Marshal(data)
+	if err != nil {
+		return "", fmt.Errorf("marshal payload to JSON failed: %w", err)
+	}
+	return string(jsonData), nil
 }
 
 // ListHandlers 列出所有已注册的处理器（调试用）
@@ -332,24 +347,167 @@ func (ts *JobService) ListHandlers() map[string]JobHandler {
 	return handlers
 }
 
-// AddTestCronTask 添加测试用的cron任务（每分钟执行）
-func (ts *JobService) AddTestCronTask() (string, error) {
-	testPayload := map[string]string{
-		"msg_type": "test",
-		"content":  fmt.Sprintf("测试任务执行 - %s", time.Now().Format("2006-01-02 15:04:05")),
+// AddFrequentTestCronTask 添加频繁执行的测试cron任务（每分钟执行，用于快速验证）
+func (ts *JobService) AddFrequentTestCronTask() (string, error) {
+	testPayload := fmt.Sprintf(`{"msg_type":"frequent_test","content":"频繁测试任务 - %s"}`, time.Now().Format("2006-01-02 15:04:05"))
+
+	// 使用5字段cron格式：每分钟执行
+	entryID, err := ts.AddCronTask("* * * * *", "bot_msg", testPayload)
+	if err != nil {
+		logger.System("添加频繁测试任务失败", "error", err)
+		return "", err
 	}
 
-	// 每分钟执行一次的cron表达式
-	return ts.AddCronTask("* * * * *", "bot_msg", testPayload)
+	logger.System("成功添加频繁测试任务", "entryID", entryID, "cronExpr", "* * * * *", "下次执行时间", "每分钟执行")
+	return entryID, nil
 }
 
-// TriggerImmediateTask 立即触发一个测试任务
-func (ts *JobService) TriggerImmediateTask() (*asynq.TaskInfo, error) {
-	testPayload := map[string]string{
-		"msg_type": "immediate_test",
-		"content":  fmt.Sprintf("立即执行测试 - %s", time.Now().Format("2006-01-02 15:04:05")),
+// GetSchedulerEntries 获取调度器中的所有条目（调试用）
+func (ts *JobService) GetSchedulerEntries() {
+	if ts.scheduler == nil {
+		logger.System("Scheduler未初始化")
+		return
+	}
+
+	logger.System("检查Scheduler状态", "scheduler_type", fmt.Sprintf("%T", ts.scheduler))
+
+	// 创建Redis客户端来直接检查
+	redisAddr := fmt.Sprintf("%s:%s", ts.redisConf.Ip, ts.redisConf.Port)
+	redisOpt := asynq.RedisClientOpt{
+		Addr:     redisAddr,
+		Username: ts.redisConf.Username,
+		Password: ts.redisConf.Password,
+		DB:       ts.redisConf.Db,
+		PoolSize: ts.redisConf.MaxTotal,
+	}
+
+	// 使用asynq的Inspector来检查
+	inspector := asynq.NewInspector(redisOpt)
+	defer inspector.Close()
+
+	// 获取调度器条目 (scheduled entries)
+	entries, err := inspector.SchedulerEntries()
+	if err != nil {
+		logger.System("获取调度器条目失败", "error", err)
+		return
+	}
+
+	logger.System("调度器条目数量", "count", len(entries))
+	for i, entry := range entries {
+		logger.System("调度器条目",
+			"index", i,
+			"id", entry.ID,
+			"spec", entry.Spec,
+			"task_type", entry.Task.Type(),
+			"next_enqueue", entry.Next.Format("2006-01-02 15:04:05"),
+			"prev_enqueue", entry.Prev.Format("2006-01-02 15:04:05"),
+		)
+	}
+}
+
+// TestCronValidation 测试 cron 表达式验证功能
+func (ts *JobService) TestCronValidation() {
+	logger.System("=== 开始测试 cron 表达式验证 ===")
+	
+	validExpressions := []string{
+		"0 * * * *",     // 每小时
+		"30 14 * * *",   // 每天14:30
+		"0 0 * * *",     // 每天0点
+		"*/5 * * * *",   // 每5分钟
+		"0 */2 * * *",   // 每2小时
+		"15 10 * * 1",   // 每周一10:15
+		"0 12 1 * *",    // 每月1号12点
+		"* * * * *",     // 每分钟
 	}
 	
-	logger.System("触发立即执行任务")
-	return ts.EnqueueTask("bot_msg", testPayload)
+	invalidExpressions := []string{
+		"0 0 */1 * * *",   // 6字段格式（错误）
+		"* * * *",         // 4字段格式（错误）  
+		"* * * * * *",     // 6字段格式（错误）
+		"",                // 空字符串
+		"invalid",         // 无效格式
+	}
+	
+	logger.System("测试有效表达式:")
+	for _, expr := range validExpressions {
+		fields := strings.Fields(expr)
+		status := "✅ 有效"
+		if len(fields) != 5 {
+			status = "❌ 无效"
+		}
+		logger.System("验证测试", "状态", status, "表达式", expr, "字段数", len(fields))
+	}
+	
+	logger.System("测试无效表达式:")
+	for _, expr := range invalidExpressions {
+		fields := strings.Fields(expr)
+		status := "❌ 无效"
+		if len(fields) == 5 {
+			status = "✅ 有效"
+		}
+		logger.System("验证测试", "状态", status, "表达式", expr, "字段数", len(fields))
+	}
+	
+	logger.System("=== cron 表达式验证测试完成 ===")
+}
+
+// AddTestHourlyTask 添加每小时测试任务，验证修复后的转换
+func (ts *JobService) AddTestHourlyTask() (string, error) {
+	testPayload := fmt.Sprintf(`{"msg_type":"hourly_test","content":"每小时测试任务 - %s"}`, time.Now().Format("2006-01-02 15:04:05"))
+	
+	// 使用5字段表达式：每小时执行  
+	cronExpr := "0 * * * *"
+	logger.System("准备添加每小时测试任务", "cronExpr", cronExpr)
+	
+	entryID, err := ts.AddCronTask(cronExpr, "bot_msg", testPayload)
+	if err != nil {
+		logger.System("添加每小时测试任务失败", "error", err)
+		return "", err
+	}
+	
+	logger.System("成功添加每小时测试任务", "entryID", entryID, "cronExpr", cronExpr)
+	return entryID, nil
+}
+
+// ComprehensiveTest 综合测试所有功能
+func (ts *JobService) ComprehensiveTest() {
+	logger.System("=== 开始综合测试 ===")
+	
+	// 1. 测试 cron 验证
+	ts.TestCronValidation()
+	
+	// 2. 添加测试任务
+	logger.System("添加每分钟测试任务")
+	minuteEntryID, err := ts.AddFrequentTestCronTask()
+	if err != nil {
+		logger.System("添加每分钟测试任务失败", "error", err)
+	} else {
+		logger.System("每分钟测试任务添加成功", "entryID", minuteEntryID)
+	}
+	
+	// 3. 添加每小时测试任务  
+	logger.System("添加每小时测试任务")
+	hourEntryID, err := ts.AddTestHourlyTask()
+	if err != nil {
+		logger.System("添加每小时测试任务失败", "error", err)
+	} else {
+		logger.System("每小时测试任务添加成功", "entryID", hourEntryID)
+	}
+	
+	// 4. 立即触发一个测试任务
+	logger.System("触发立即执行测试")
+	testPayload := fmt.Sprintf(`{"msg_type":"immediate_test","content":"立即执行测试 - %s"}`, time.Now().Format("2006-01-02 15:04:05"))
+	
+	taskInfo, err := ts.EnqueueTask("bot_msg", testPayload)
+	if err != nil {
+		logger.System("立即执行测试失败", "error", err)
+	} else {
+		logger.System("立即执行测试成功", "taskID", taskInfo.ID, "queue", taskInfo.Queue)
+	}
+	
+	// 5. 检查调度器条目
+	time.Sleep(100 * time.Millisecond) // 等待任务注册
+	ts.GetSchedulerEntries()
+	
+	logger.System("=== 综合测试完成 ===")
 }

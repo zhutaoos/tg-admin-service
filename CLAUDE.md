@@ -3,58 +3,27 @@
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 ## Project Overview
-
-**tg-admin-service** is a Go-based admin service API built with Gin + Gorm framework for rapid API development. It's a Chinese-language project focused on administrative functionality.
+tg-admin-service is a Go-based admin API service built with Gin + Gorm framework, focused on administrative functionality with Chinese language support.
 
 ## Technology Stack
-
 - **Framework**: Gin (HTTP routing), Gorm (ORM)
 - **Database**: MySQL (via Gorm), Redis (for caching/queues)
 - **Configuration**: Viper for config file management
 - **Authentication**: JWT tokens for API authentication
 - **Dependency Injection**: Uber FX for DI and lifecycle management
 - **Logging**: Custom structured logging
-- **Queue System**: Redis-based message and delay queues
+- **Queue System**: Redis-based message and delay queues with Asynq
 
 ## Architecture
-
-### Layer Structure (Clean Architecture)
-```
-├── internal/
-│   ├── config/           # Configuration management
-│   ├── controller/       # HTTP handlers (presentation layer)
-│   ├── converter/        # Data conversion utilities
-│   ├── middleware/       # HTTP middleware (CORS, JWT, response formatting)
-│   ├── model/           # Database models (domain layer)
-│   ├── provider/        # Dependency injection providers
-│   ├── query/           # Database query builders
-│   ├── request/         # Request DTOs
-│   ├── router/          # Route definitions
-│   ├── service/         # Business logic layer
-│   └── vo/             # View objects (response DTOs)
-├── tools/               # Shared utilities
-│   ├── jwt/            # JWT token utilities
-│   ├── logger/         # Logging utilities
-│   ├── resp/           # Response formatting
-│   └── random/         # Random generation utilities
-```
-
-### Key Components
-
-**Dependency Injection**: Uses Uber FX for DI with modules defined in `internal/provider/provider_set.go`
-
-**Database Models**: Located in `internal/model/` with auto-migration support
-
-**Middleware Stack**: 
-- CORS handling
-- JWT authentication (with whitelist for public endpoints)
-- Response formatting
-- Access logging
-
-**Queue System**: Redis-based implementation with:
-- Normal message queues (Redis Streams)
-- Delay queues (Redis ZSET)
-- Callback registration system
+Clean Architecture pattern with the following layers:
+- `internal/controller/` - HTTP handlers
+- `internal/service/` - Business logic
+- `internal/model/` - Database models
+- `internal/job/` - Background job processing (Asynq-based)
+- `internal/middleware/` - HTTP middleware
+- `internal/router/` - Route definitions
+- `internal/config/` - Configuration management
+- `tools/` - Shared utilities
 
 ## Development Commands
 
@@ -63,7 +32,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 # Development mode
 go run main.go -mode=dev
 
-# Production mode  
+# Production mode
 go run main.go -mode=prod
 
 # With database initialization
@@ -79,101 +48,33 @@ go build -o tg-admin-service
 cd deploy && ./deploy.sh tg-admin-service linux amd64 0
 ```
 
-### Configuration
-Configuration files are in `config/` directory:
-- `dev.ini` - Development environment
-- `prod.ini` - Production environment  
-- `deploy.ini` - Deployment configuration
-
-Key configuration sections:
-- `[mysql]` - Database connection
-- `[redis]` - Redis connection
-- `[server]` - Server port and name
+### Testing Cron Tasks
+The codebase includes built-in cron task testing via `JobService.ComprehensiveTest()` which:
+- Validates cron expressions
+- Tests immediate task execution
+- Adds test cron tasks (1-minute intervals)
+- Displays scheduler entries from Redis
 
 ### Database Setup
-The application uses Gorm with auto-migration. Models are auto-migrated on startup when `-initDb=true` is used.
+Models auto-migrate on startup when `-initDb=true` is used. Configuration files are in `config/` directory:
+- `dev.ini` - Development environment
+- `prod.ini` - Production environment
+- `deploy.ini` - Deployment configuration
 
-## API Structure
+### Key Configuration Sections
+- `[mysql]` - Database connection
+- `[redis]` - Redis connection (for queues and caching)
+- `[server]` - Server port and name
 
-### Authentication
-- JWT-based authentication
-- Whitelist endpoints bypass JWT: `/admin/login`, `/admin/initPwd`, `/api/index/health`
+## Queue System Details
+- **Task Types**: bot_msg, coupon:open, coupon:expire
+- **Handler Registration**: Via `job.NewBotMsgHandler()` in provider.go
+- **Cron Format**: 5-field format (`分 时 日 月 周`)
+- **Timezone**: Asia/Shanghai
+- **Validation**: Built-in cron expression validation
 
-### Route Groups
-- `/admin/*` - Admin management endpoints
-- `/api/user/*` - User management endpoints  
-- `/api/evaluate/*` - Evaluation-related endpoints
-- `/api/index/health` - Health check endpoint
-
-### Response Format
-All API responses use standardized JSON format:
-```json
-{
-  "code": 0,
-  "msg": "success",
-  "data": {}
-}
-```
-
-## Testing
-
-### Running Tests
-```bash
-# Run all tests
-go test ./...
-
-# Run tests for specific package
-go test ./internal/service/...
-
-# Run tests with coverage
-go test -cover ./...
-```
-
-### Environment Setup
-1. Ensure MySQL and Redis are running
-2. Configure database credentials in `config/dev.ini`
-3. Run with `-initDb=true` to initialize database schema
-
-## Deployment
-
-### Manual Deployment
-```bash
-# Build for production
-cd deploy
-./deploy.sh tg-admin-service linux amd64 0
-
-# Deploy to server
-tar -xzf tg-admin-service.tar.gz
-nohup ./tg-admin-service -mode=prod > tg-admin-service.log 2>&1 &
-```
-
-### Docker (if needed)
-Standard Go containerization patterns apply.
-
-## Key Files to Know
-
-- `main.go` - Application entry point with FX lifecycle
-- `internal/provider/provider_set.go` - Dependency injection configuration
-- `internal/router/router.go` - Main router setup and middleware
-- `internal/config/config.go` - Configuration management
-- `tools/logger/logger.go` - Logging utilities
-
-## Common Development Tasks
-
-### Adding New API Endpoints
-1. Create request DTO in `internal/request/`
-2. Add model in `internal/model/` (if needed)
-3. Implement service in `internal/service/`
-4. Create controller in `internal/controller/`
-5. Add route in `internal/router/`
-6. Register provider in `internal/provider/`
-
-### Database Changes
-1. Update model in `internal/model/`
-2. Run with `-initDb=true` to auto-migrate
-3. Update service layer as needed
-
-### Queue Usage
-See README.md for detailed queue implementation examples using Redis Streams and ZSET for delay queues.
-- 默认用中文回复
-- 请求默认都是post请求，返回的时间格式默认都是 2025-08-22 22:12:12 这样的格式
+## Common API Endpoints
+- `/api/task/create` - Create cron tasks
+- `/api/admin/login` - Admin authentication
+- `/api/index/health` - Health check
+- All endpoints return standardized JSON format with Chinese messages

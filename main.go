@@ -140,4 +140,12 @@ func initJobService(jobService *job.JobService) {
 	// 这个函数的存在就是为了让FX知道TaskService被使用了
 	// 从而触发其生命周期钩子
 	logger.System("JobService 依赖已注入")
+
+	// 在应用启动后运行综合测试
+	go func() {
+		// 等待服务完全启动
+		time.Sleep(2 * time.Second)
+		logger.System("准备运行JobService综合测试...")
+		jobService.ComprehensiveTest()
+	}()
 }

@@ -117,10 +117,8 @@ func (t *TaskServiceImpl) CreateTask(req *request.CreateTaskRequest, adminID uin
 	if err := t.db.Create(task).Error; err != nil {
 		return nil, err
 	}
-	jobBotMsgPayload := &job.BotMsgPayload{Content: fmt.Sprintf("任务创建成功，任务ID：%d", task.ID)}
+	jobBotMsgPayload := fmt.Sprintf(`{"msg_type":"task_created","content":"任务创建成功，任务ID：%d"}`, task.ID)
 	_, err1 := t.jobService.AddCronTask(task.CronExpression, job.BotMsgType, jobBotMsgPayload)
-	t.jobService.AddTestCronTask()
-	t.jobService.TriggerImmediateTask()
 	if err1 != nil {
 		logger.Error("添加定时任务失败", "error", err1)
 	}
