@@ -267,24 +267,32 @@ func (ts *JobService) ScheduleTask(taskType string, payload string, processAt ti
 
 // AddCronTask 添加周期性任务
 func (ts *JobService) AddCronTask(cronExpr, taskType string, payload string) (string, error) {
-	if ts.scheduler == nil {
-		return "", fmt.Errorf("scheduler not initialized")
-	}
+    if ts.scheduler == nil {
+        return "", fmt.Errorf("scheduler not initialized")
+    }
 
-	logger.System("准备注册周期任务",
-		"cronExpr", cronExpr,
-		"taskType", taskType,
-		"当前时间", time.Now().Format("2006-01-02 15:04:05"),
-		"调度器时区", "Asia/Shanghai")
+    logger.System("准备注册周期任务",
+        "cronExpr", cronExpr,
+        "taskType", taskType,
+        "当前时间", time.Now().Format("2006-01-02 15:04:05"),
+        "调度器时区", "Asia/Shanghai")
 
-	// 验证 cron 表达式格式（应该是5字段）
-	fields := strings.Fields(cronExpr)
-	if len(fields) != 5 {
-		return "", fmt.Errorf("cron表达式格式错误: 期望5字段格式 '分 时 日 月 周'，实际%d字段: %s", len(fields), cronExpr)
-	}
+    // 兼容6字段（含秒）与5字段表达式：asynq/robfig scheduler使用5字段
+    // 若为6字段，自动去掉秒字段
+    fields := strings.Fields(cronExpr)
+    switch len(fields) {
+    case 5:
+        // ok
+    case 6:
+        normalized := strings.Join(fields[1:], " ")
+        logger.System("检测到6字段Cron，自动转换为5字段", "原始", cronExpr, "转换后", normalized)
+        cronExpr = normalized
+    default:
+        return "", fmt.Errorf("cron表达式格式错误: 期望5字段(或6字段含秒)，实际%d字段: %s", len(fields), cronExpr)
+    }
 
-	task := asynq.NewTask(taskType, []byte(payload))
-	logger.System("正在注册周期任务到调度器", "cronExpr", cronExpr, "taskType", taskType)
+    task := asynq.NewTask(taskType, []byte(payload))
+    logger.System("正在注册周期任务到调度器", "cronExpr", cronExpr, "taskType", taskType)
 	entryID, err := ts.scheduler.Register(cronExpr, task)
 	if err != nil {
 		logger.System("注册周期任务失败", "error", err, "cronExpr", cronExpr, "taskType", taskType)
@@ -303,7 +311,6 @@ func (ts *JobService) AddCronTask(cronExpr, taskType string, payload string) (st
 
 	return entryID, nil
 }
-
 
 // RemoveCronTask 移除周期性任务
 func (ts *JobService) RemoveCronTask(entryID string) error {
@@ -408,26 +415,26 @@ func (ts *JobService) GetSchedulerEntries() {
 // TestCronValidation 测试 cron 表达式验证功能
 func (ts *JobService) TestCronValidation() {
 	logger.System("=== 开始测试 cron 表达式验证 ===")
-	
+
 	validExpressions := []string{
-		"0 * * * *",     // 每小时
-		"30 14 * * *",   // 每天14:30
-		"0 0 * * *",     // 每天0点
-		"*/5 * * * *",   // 每5分钟
-		"0 */2 * * *",   // 每2小时
-		"15 10 * * 1",   // 每周一10:15
-		"0 12 1 * *",    // 每月1号12点
-		"* * * * *",     // 每分钟
+		"0 * * * *",   // 每小时
+		"30 14 * * *", // 每天14:30
+		"0 0 * * *",   // 每天0点
+		"*/5 * * * *", // 每5分钟
+		"0 */2 * * *", // 每2小时
+		"15 10 * * 1", // 每周一10:15
+		"0 12 1 * *",  // 每月1号12点
+		"* * * * *",   // 每分钟
 	}
-	
+
 	invalidExpressions := []string{
-		"0 0 */1 * * *",   // 6字段格式（错误）
-		"* * * *",         // 4字段格式（错误）  
-		"* * * * * *",     // 6字段格式（错误）
-		"",                // 空字符串
-		"invalid",         // 无效格式
+		"0 0 */1 * * *", // 6字段格式（错误）
+		"* * * *",       // 4字段格式（错误）
+		"* * * * * *",   // 6字段格式（错误）
+		"",              // 空字符串
+		"invalid",       // 无效格式
 	}
-	
+
 	logger.System("测试有效表达式:")
 	for _, expr := range validExpressions {
 		fields := strings.Fields(expr)
@@ -437,7 +444,7 @@ func (ts *JobService) TestCronValidation() {
 		}
 		logger.System("验证测试", "状态", status, "表达式", expr, "字段数", len(fields))
 	}
-	
+
 	logger.System("测试无效表达式:")
 	for _, expr := range invalidExpressions {
 		fields := strings.Fields(expr)
@@ -447,24 +454,24 @@ func (ts *JobService) TestCronValidation() {
 		}
 		logger.System("验证测试", "状态", status, "表达式", expr, "字段数", len(fields))
 	}
-	
+
 	logger.System("=== cron 表达式验证测试完成 ===")
 }
 
 // AddTestHourlyTask 添加每小时测试任务，验证修复后的转换
 func (ts *JobService) AddTestHourlyTask() (string, error) {
 	testPayload := fmt.Sprintf(`{"msg_type":"hourly_test","content":"每小时测试任务 - %s"}`, time.Now().Format("2006-01-02 15:04:05"))
-	
-	// 使用5字段表达式：每小时执行  
+
+	// 使用5字段表达式：每小时执行
 	cronExpr := "0 * * * *"
 	logger.System("准备添加每小时测试任务", "cronExpr", cronExpr)
-	
+
 	entryID, err := ts.AddCronTask(cronExpr, "bot_msg", testPayload)
 	if err != nil {
 		logger.System("添加每小时测试任务失败", "error", err)
 		return "", err
 	}
-	
+
 	logger.System("成功添加每小时测试任务", "entryID", entryID, "cronExpr", cronExpr)
 	return entryID, nil
 }
@@ -472,10 +479,10 @@ func (ts *JobService) AddTestHourlyTask() (string, error) {
 // ComprehensiveTest 综合测试所有功能
 func (ts *JobService) ComprehensiveTest() {
 	logger.System("=== 开始综合测试 ===")
-	
+
 	// 1. 测试 cron 验证
 	ts.TestCronValidation()
-	
+
 	// 2. 添加测试任务
 	logger.System("添加每分钟测试任务")
 	minuteEntryID, err := ts.AddFrequentTestCronTask()
@@ -484,8 +491,8 @@ func (ts *JobService) ComprehensiveTest() {
 	} else {
 		logger.System("每分钟测试任务添加成功", "entryID", minuteEntryID)
 	}
-	
-	// 3. 添加每小时测试任务  
+
+	// 3. 添加每小时测试任务
 	logger.System("添加每小时测试任务")
 	hourEntryID, err := ts.AddTestHourlyTask()
 	if err != nil {
@@ -493,21 +500,21 @@ func (ts *JobService) ComprehensiveTest() {
 	} else {
 		logger.System("每小时测试任务添加成功", "entryID", hourEntryID)
 	}
-	
+
 	// 4. 立即触发一个测试任务
 	logger.System("触发立即执行测试")
 	testPayload := fmt.Sprintf(`{"msg_type":"immediate_test","content":"立即执行测试 - %s"}`, time.Now().Format("2006-01-02 15:04:05"))
-	
+
 	taskInfo, err := ts.EnqueueTask("bot_msg", testPayload)
 	if err != nil {
 		logger.System("立即执行测试失败", "error", err)
 	} else {
 		logger.System("立即执行测试成功", "taskID", taskInfo.ID, "queue", taskInfo.Queue)
 	}
-	
+
 	// 5. 检查调度器条目
 	time.Sleep(100 * time.Millisecond) // 等待任务注册
 	ts.GetSchedulerEntries()
-	
+
 	logger.System("=== 综合测试完成 ===")
 }

@@ -1,19 +1,19 @@
 package service
 
 import (
-	"app/internal/job"
-	"app/internal/model"
-	"app/internal/request"
-	"app/internal/vo"
-	"app/tools/cron"
-	"app/tools/logger"
-	"encoding/json"
-	"errors"
-	"fmt"
-	"strings"
-	"time"
+    "app/internal/job"
+    "app/internal/model"
+    "app/internal/request"
+    "app/internal/vo"
+    "app/tools/cron"
+    "app/tools/logger"
+    "encoding/json"
+    "errors"
+    "fmt"
+    "strings"
+    "time"
 
-	"gorm.io/gorm"
+    "gorm.io/gorm"
 )
 
 // TaskService 任务服务接口
@@ -27,18 +27,29 @@ type TaskService interface {
 }
 
 type TaskServiceImpl struct {
-	db         *gorm.DB
-	cronUtils  *cron.CronUtils
-	jobService *job.JobService
+    db         *gorm.DB
+    cronUtils  *cron.CronUtils
+    jobService *job.JobService
 }
 
 // NewTaskService 创建TaskService实例
 func NewTaskService(db *gorm.DB, jobService *job.JobService) TaskService {
-	return &TaskServiceImpl{
-		db:         db,
-		cronUtils:  cron.NewCronUtils(),
-		jobService: jobService,
-	}
+    return &TaskServiceImpl{
+        db:         db,
+        cronUtils:  cron.NewCronUtils(),
+        jobService: jobService,
+    }
+}
+
+// normalizeCronTo5 将6位（含秒）cron表达式规整为5位（去秒）。
+func (t *TaskServiceImpl) normalizeCronTo5(expr string) (string, bool) {
+    fields := strings.Fields(expr)
+    if len(fields) == 6 {
+        normalized := strings.Join(fields[1:], " ")
+        logger.System("检测到6字段Cron，保存前转换为5字段", "原始", expr, "转换后", normalized)
+        return normalized, true
+    }
+    return expr, false
 }
 
 // CreateTask 创建任务
@@ -52,28 +63,36 @@ func (t *TaskServiceImpl) CreateTask(req *request.CreateTaskRequest, adminID uin
 	}
 
 	// 验证 Cron 表达式
-	if req.TriggerType == model.TriggerTypeCron {
-		if valid, errMsg := t.cronUtils.ValidateCronExpression(req.CronExpression); !valid {
-			return nil, errors.New("Cron表达式格式错误: " + errMsg)
-		}
-	}
+    if req.TriggerType == model.TriggerTypeCron {
+        if valid, errMsg := t.cronUtils.ValidateCronExpression(req.CronExpression); !valid {
+            return nil, errors.New("Cron表达式格式错误: " + errMsg)
+        }
+    }
+
+    // 规整Cron为5位后再保存
+    cronExpr := req.CronExpression
+    if req.TriggerType == model.TriggerTypeCron && cronExpr != "" {
+        if normalized, changed := t.normalizeCronTo5(cronExpr); changed {
+            cronExpr = normalized
+        }
+    }
 
 	// 构建任务模型
-	task := &model.Task{
-		TaskName:        req.TaskName,
-		Description:     req.Description,
-		Status:          0, // 待执行
-		AdminID:         adminID,
-		TriggerType:     req.TriggerType,
-		ScheduleTime:    req.GetScheduleTime(),
-		CronExpression:  req.CronExpression,
-		CronPatternType: req.CronPatternType,
-		ExecuteCount:    0,
-		RetryCount:      0,
-		MaxRetryCount:   req.MaxRetryCount,
-		CreateTime:      time.Now(),
-		UpdateTime:      time.Now(),
-	}
+    task := &model.Task{
+        TaskName:        req.TaskName,
+        Description:     req.Description,
+        Status:          0, // 待执行
+        AdminID:         adminID,
+        TriggerType:     req.TriggerType,
+        ScheduleTime:    req.GetScheduleTime(),
+        CronExpression:  cronExpr,
+        CronPatternType: req.CronPatternType,
+        ExecuteCount:    0,
+        RetryCount:      0,
+        MaxRetryCount:   req.MaxRetryCount,
+        CreateTime:      time.Now(),
+        UpdateTime:      time.Now(),
+    }
 
 	// 如果未设置最大重试次数，默认为3次
 	if task.MaxRetryCount == 0 {
@@ -104,24 +123,24 @@ func (t *TaskServiceImpl) CreateTask(req *request.CreateTaskRequest, adminID uin
 	// 计算下次执行时间
 	if req.TriggerType == model.TriggerTypeSchedule && req.GetScheduleTime() != nil {
 		task.NextExecuteAt = req.GetScheduleTime()
-	} else if req.TriggerType == model.TriggerTypeCron && req.CronExpression != "" {
-		// 计算 Cron 类型任务的下次执行时间
-		nextTime, err := t.cronUtils.CalculateNextExecution(req.CronExpression, time.Now())
-		if err != nil {
-			return nil, errors.New("计算下次执行时间失败: " + err.Error())
-		}
-		task.NextExecuteAt = nextTime
-	}
+    } else if req.TriggerType == model.TriggerTypeCron && cronExpr != "" {
+        // 计算 Cron 类型任务的下次执行时间
+        nextTime, err := t.cronUtils.CalculateNextExecution(cronExpr, time.Now())
+        if err != nil {
+            return nil, errors.New("计算下次执行时间失败: " + err.Error())
+        }
+        task.NextExecuteAt = nextTime
+    }
 
 	// 保存任务
 	if err := t.db.Create(task).Error; err != nil {
 		return nil, err
 	}
-	jobBotMsgPayload := fmt.Sprintf(`{"msg_type":"task_created","content":"任务创建成功，任务ID：%d"}`, task.ID)
-	_, err1 := t.jobService.AddCronTask(task.CronExpression, job.BotMsgType, jobBotMsgPayload)
-	if err1 != nil {
-		logger.Error("添加定时任务失败", "error", err1)
-	}
+	jobBotMsgPayload := fmt.Sprintf(`{"msg_type":"bot_msg","content":"任务创建成功，任务ID：%d"}`, task.ID)
+    _, err1 := t.jobService.AddCronTask(task.CronExpression, job.BotMsgType, jobBotMsgPayload)
+    if err1 != nil {
+        logger.Error("添加定时任务失败", "error", err1)
+    }
 	// 转换为VO
 	return t.taskToVO(task), nil
 }
@@ -151,23 +170,31 @@ func (t *TaskServiceImpl) UpdateTask(req *request.UpdateTaskRequest, adminID uin
 	}
 
 	// 验证 Cron 表达式
-	if req.TriggerType == model.TriggerTypeCron {
-		if valid, errMsg := t.cronUtils.ValidateCronExpression(req.CronExpression); !valid {
-			return nil, errors.New("Cron表达式格式错误: " + errMsg)
-		}
-	}
+    if req.TriggerType == model.TriggerTypeCron {
+        if valid, errMsg := t.cronUtils.ValidateCronExpression(req.CronExpression); !valid {
+            return nil, errors.New("Cron表达式格式错误: " + errMsg)
+        }
+    }
+
+    // 规整Cron为5位
+    cronExpr := req.CronExpression
+    if req.TriggerType == model.TriggerTypeCron && cronExpr != "" {
+        if normalized, changed := t.normalizeCronTo5(cronExpr); changed {
+            cronExpr = normalized
+        }
+    }
 
 	// 更新字段
-	updates := map[string]interface{}{
-		"task_name":         req.TaskName,
-		"description":       req.Description,
-		"trigger_type":      req.TriggerType,
-		"schedule_time":     req.GetScheduleTime(),
-		"cron_expression":   req.CronExpression,
-		"cron_pattern_type": req.CronPatternType,
-		"max_retry_count":   req.MaxRetryCount,
-		"update_time":       time.Now(),
-	}
+    updates := map[string]interface{}{
+        "task_name":         req.TaskName,
+        "description":       req.Description,
+        "trigger_type":      req.TriggerType,
+        "schedule_time":     req.GetScheduleTime(),
+        "cron_expression":   cronExpr,
+        "cron_pattern_type": req.CronPatternType,
+        "max_retry_count":   req.MaxRetryCount,
+        "update_time":       time.Now(),
+    }
 
 	// 处理JSON字段
 	groupIDsJSON, err := json.Marshal(req.GroupIDs)
@@ -193,14 +220,14 @@ func (t *TaskServiceImpl) UpdateTask(req *request.UpdateTaskRequest, adminID uin
 	// 更新下次执行时间
 	if req.TriggerType == model.TriggerTypeSchedule && req.GetScheduleTime() != nil {
 		updates["next_execute_at"] = req.GetScheduleTime()
-	} else if req.TriggerType == model.TriggerTypeCron && req.CronExpression != "" {
-		// 计算 Cron 类型任务的下次执行时间
-		nextTime, err := t.cronUtils.CalculateNextExecution(req.CronExpression, time.Now())
-		if err != nil {
-			return nil, errors.New("计算下次执行时间失败: " + err.Error())
-		}
-		updates["next_execute_at"] = nextTime
-	}
+    } else if req.TriggerType == model.TriggerTypeCron && cronExpr != "" {
+        // 计算 Cron 类型任务的下次执行时间
+        nextTime, err := t.cronUtils.CalculateNextExecution(cronExpr, time.Now())
+        if err != nil {
+            return nil, errors.New("计算下次执行时间失败: " + err.Error())
+        }
+        updates["next_execute_at"] = nextTime
+    }
 
 	// 执行更新
 	if err := t.db.Model(task).Updates(updates).Error; err != nil {
