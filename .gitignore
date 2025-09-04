@@ -19,3 +19,4 @@ test.go
 *.tar.gz
 *test*
 *.pid
+.gocache

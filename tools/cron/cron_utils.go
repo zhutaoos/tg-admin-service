@@ -1,24 +1,21 @@
 package cron
 
 import (
-	"fmt"
-	"time"
+    "fmt"
+    "time"
 
-	"github.com/robfig/cron/v3"
+    "github.com/robfig/cron/v3"
 )
 
-// CronUtils Cron 表达式工具类
+// CronUtils Cron 工具类（仅支持标准 5 位表达式：分 时 日 月 周）
 type CronUtils struct {
-	parser cron.Parser
+    parser cron.Parser
 }
 
-// NewCronUtils 创建 CronUtils 实例
+// NewCronUtils 创建 CronUtils 实例（只解析 5 位表达式）
 func NewCronUtils() *CronUtils {
-	// 创建支持秒级精度的解析器（6位表达式）
-	parser := cron.NewParser(cron.Second | cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow | cron.Descriptor)
-	return &CronUtils{
-		parser: parser,
-	}
+    parser := cron.NewParser(cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow | cron.Descriptor)
+    return &CronUtils{parser: parser}
 }
 
 // CronResult Cron 计算结果
@@ -31,26 +28,21 @@ type CronResult struct {
 
 // ParseAndCalculateNext 解析 Cron 表达式并计算下次执行时间
 func (c *CronUtils) ParseAndCalculateNext(cronExpr string, baseTime time.Time) *CronResult {
-	result := &CronResult{
-		IsValid: false,
-	}
+    result := &CronResult{
+        IsValid: false,
+    }
 
-	if cronExpr == "" {
-		result.ErrorMessage = "Cron 表达式不能为空"
-		return result
-	}
+    if cronExpr == "" {
+        result.ErrorMessage = "Cron 表达式不能为空"
+        return result
+    }
 
-	// 尝试解析 cron 表达式
-	schedule, err := c.parser.Parse(cronExpr)
-	if err != nil {
-		// 如果 6 位解析失败，尝试标准 5 位解析
-		standardParser := cron.NewParser(cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow | cron.Descriptor)
-		schedule, err = standardParser.Parse(cronExpr)
-		if err != nil {
-			result.ErrorMessage = fmt.Sprintf("无效的 Cron 表达式: %v", err)
-			return result
-		}
-	}
+    // 严格使用 5 位解析
+    schedule, err := c.parser.Parse(cronExpr)
+    if err != nil {
+        result.ErrorMessage = fmt.Sprintf("无效的 Cron 表达式: %v", err)
+        return result
+    }
 
 	// 计算下次执行时间
 	nextTime := schedule.Next(baseTime)
@@ -77,22 +69,16 @@ func (c *CronUtils) CalculateNextExecution(cronExpr string, baseTime time.Time) 
 
 // ValidateCronExpression 验证 Cron 表达式是否有效
 func (c *CronUtils) ValidateCronExpression(cronExpr string) (bool, string) {
-	if cronExpr == "" {
-		return false, "Cron 表达式不能为空"
-	}
+    if cronExpr == "" {
+        return false, "Cron 表达式不能为空"
+    }
 
-	// 尝试解析表达式
-	_, err := c.parser.Parse(cronExpr)
-	if err != nil {
-		// 如果 6 位解析失败，尝试标准 5 位解析
-		standardParser := cron.NewParser(cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow | cron.Descriptor)
-		_, err = standardParser.Parse(cronExpr)
-		if err != nil {
-			return false, fmt.Sprintf("无效的 Cron 表达式: %v", err)
-		}
-	}
+    // 仅按 5 位解析
+    if _, err := c.parser.Parse(cronExpr); err != nil {
+        return false, fmt.Sprintf("无效的 Cron 表达式: %v", err)
+    }
 
-	return true, ""
+    return true, ""
 }
 
 // getDescription 获取 Cron 表达式的人性化描述
@@ -126,19 +112,14 @@ func (c *CronUtils) getDescription(cronExpr string) string {
 
 // GetNextExecutions 获取多个下次执行时间（用于预览）
 func (c *CronUtils) GetNextExecutions(cronExpr string, baseTime time.Time, count int) ([]*time.Time, error) {
-	if count <= 0 || count > 10 {
-		count = 5 // 默认返回5次
-	}
+    if count <= 0 || count > 10 {
+        count = 5 // 默认返回5次
+    }
 
-	schedule, err := c.parser.Parse(cronExpr)
-	if err != nil {
-		// 尝试标准解析器
-		standardParser := cron.NewParser(cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow | cron.Descriptor)
-		schedule, err = standardParser.Parse(cronExpr)
-		if err != nil {
-			return nil, fmt.Errorf("无效的 Cron 表达式: %v", err)
-		}
-	}
+    schedule, err := c.parser.Parse(cronExpr)
+    if err != nil {
+        return nil, fmt.Errorf("无效的 Cron 表达式: %v", err)
+    }
 
 	executions := make([]*time.Time, 0, count)
 	currentTime := baseTime

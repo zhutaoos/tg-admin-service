@@ -65,8 +65,9 @@ type TaskVo struct {
 	MessageIDs      []uint64                `json:"messageIds"`
 	TriggerType     model.TriggerType       `json:"triggerType"`
 	TriggerTypeText string                  `json:"triggerTypeText"`
-	ScheduleTime    *CustomTime             `json:"scheduleTime"`
-	CronExpression  string                  `json:"cronExpression"`
+    ScheduleTime    *CustomTime             `json:"scheduleTime"`
+    ExpireTime      *CustomTime             `json:"expireTime"`
+    CronExpression  string                  `json:"cronExpression"`
 	CronPatternType *model.CronPatternType  `json:"cronPatternType"`
 	CronConfig      map[string]interface{}  `json:"cronConfig"`
 	LastExecutedAt  *CustomTime             `json:"lastExecutedAt"`
@@ -96,12 +97,14 @@ type TaskStatsVo struct {
 
 // GetStatusText 获取状态文本
 func (t *TaskVo) GetStatusText() string {
-	switch t.Status {
-	case 0:
-		return "待执行"
-	case 1:
-		return "执行中"
-	case 2:
+    switch t.Status {
+    case -1:
+        return "待提交"
+    case 0:
+        return "待执行"
+    case 1:
+        return "执行中"
+    case 2:
 		return "已完成"
 	case 3:
 		return "执行失败"

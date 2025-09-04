@@ -20,11 +20,14 @@ func NewTaskRoute(taskController *task.TaskController) *TaskRoute {
 
 // InitRoute 初始化任务路由
 func (tr *TaskRoute) InitRoute(r *gin.Engine) {
-	// 任务管理路由组
-	taskGroup := r.Group("/api/task")
-	{
-		// 创建任务
-		taskGroup.POST("/create", tr.TaskController.CreateTask)
+    // 任务管理路由组
+    taskGroup := r.Group("/api/task")
+    {
+        // 创建任务
+        taskGroup.POST("/create", tr.TaskController.CreateTask)
+
+        // 提交任务
+        taskGroup.POST("/submit", tr.TaskController.SubmitTask)
 
 		// 更新任务
 		taskGroup.POST("/update", tr.TaskController.UpdateTask)

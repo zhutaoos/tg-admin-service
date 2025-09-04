@@ -38,3 +38,6 @@
 ## Security & Configuration Tips
 - Never commit secrets. Use `config/dev.ini` locally; `-mode=prod` loads `config/prod.ini`.
 - Validate inputs in controllers; rely on middleware for CORS/JWT. Review `whitelist` in `internal/router/router.go` when adding public routes.
+
+# Response
+- Reply in Chinese by default

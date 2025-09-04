@@ -24,11 +24,11 @@ func NewTaskController(taskService service.TaskService) *TaskController {
 
 // CreateTask 创建任务
 func (tc *TaskController) CreateTask(ctx *gin.Context) {
-	var req request.CreateTaskRequest
-	if err := ctx.ShouldBindJSON(&req); err != nil {
-		(&resp.JsonResp{Code: resp.ReFail, Msg: "参数缺失或格式错误: " + err.Error()}).Response()
-		return
-	}
+    var req request.CreateTaskRequest
+    if err := ctx.ShouldBindJSON(&req); err != nil {
+        (&resp.JsonResp{Code: resp.ReFail, Msg: "参数缺失或格式错误: " + err.Error()}).Response()
+        return
+    }
 
 	// 获取当前用户ID
 	adminID := uint(tc.CurrentUserId(ctx))
@@ -40,7 +40,26 @@ func (tc *TaskController) CreateTask(ctx *gin.Context) {
 		return
 	}
 
-	(&resp.JsonResp{Code: resp.ReSuccess, Msg: "创建任务成功", Data: taskVO}).Response()
+    (&resp.JsonResp{Code: resp.ReSuccess, Msg: "创建任务成功", Data: taskVO}).Response()
+}
+
+// SubmitTask 提交任务（将待提交的任务变为待执行并入队）
+func (tc *TaskController) SubmitTask(ctx *gin.Context) {
+    var req request.SubmitTaskRequest
+    if err := ctx.ShouldBindJSON(&req); err != nil {
+        (&resp.JsonResp{Code: resp.ReFail, Msg: "参数缺失或格式错误: " + err.Error()}).Response()
+        return
+    }
+
+    adminID := uint(tc.CurrentUserId(ctx))
+
+    taskVO, err := tc.TaskService.SubmitTask(&req, adminID)
+    if err != nil {
+        (&resp.JsonResp{Code: resp.ReError, Msg: "提交任务失败: " + err.Error()}).Response()
+        return
+    }
+
+    (&resp.JsonResp{Code: resp.ReSuccess, Msg: "提交任务成功", Data: taskVO}).Response()
 }
 
 // UpdateTask 更新任务
@@ -134,4 +153,3 @@ func (tc *TaskController) TaskList(ctx *gin.Context) {
 
 	(&resp.JsonResp{Code: resp.ReSuccess, Msg: "获取任务列表成功", Data: data}).Response()
 }
-

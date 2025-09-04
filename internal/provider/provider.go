@@ -16,14 +16,14 @@ import (
 
 // InfrastructureModule 基础设施层Module
 var InfrastructureModule = fx.Options(
-	fx.Provide(
-		NewConfig,
-		NewDatabaseConfig,
-		NewRedisConfig,
-		NewConfigWatcher,
-		NewDatabase,
-		NewRedis,
-		job.NewJobService, // 异步任务服务 (*asynqTask.TaskService)
+    fx.Provide(
+        NewConfig,
+        NewDatabaseConfig,
+        NewRedisConfig,
+        NewConfigWatcher,
+        NewDatabase,
+        NewRedis,
+        job.NewJobService, // 异步任务服务 (*asynqTask.TaskService)
 		// Service层Provider
 		NewUserService,
 		NewAdminService,
@@ -34,10 +34,11 @@ var InfrastructureModule = fx.Options(
 		NewMessageService,
 		NewFileService,
 		NewTaskService,
-	),
-	fx.Invoke(
-		job.NewBotMsgHandler, // 注册Bot消息处理器
-	),
+    ),
+    fx.Invoke(
+        job.NewBotMsgHandler, // 注册Bot消息处理器
+        job.NewTaskRestorer,  // 启动时恢复任务
+    ),
 )
 
 // ControllerModule 控制器Module
