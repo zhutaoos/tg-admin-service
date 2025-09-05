@@ -58,7 +58,8 @@ type CreateTaskRequest struct {
     MessageIDs      []uint64               `json:"messageIds" binding:"required" validate:"required,min=1"`
     TriggerType     model.TriggerType      `json:"triggerType" binding:"required" validate:"required,oneof=schedule cron"`
     ScheduleTime    *FlexibleTime          `json:"scheduleTime"`
-    ExpireTime      *FlexibleTime          `json:"expireTime" binding:"required"`
+    // 定时执行（schedule）不再要求到期时间；仅周期任务（cron）在服务层校验必填
+    ExpireTime      *FlexibleTime          `json:"expireTime"`
     CronExpression  string                 `json:"cronExpression"`
     CronPatternType *model.CronPatternType `json:"cronPatternType"`
     CronConfig      map[string]interface{} `json:"cronConfig"`

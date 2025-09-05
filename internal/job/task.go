@@ -248,6 +248,102 @@ func (ts *JobService) newInspector() *asynq.Inspector {
     return asynq.NewInspector(redisOpt)
 }
 
+// PurgeQueuesByDBTaskID 尝试从所有asynq队列中移除与DB任务关联的任务
+// - pending/scheduled/retry/archived/completed: 直接删除
+// - active: 发送取消信号（最佳努力）
+// 返回删除数量与取消中的数量
+func (ts *JobService) PurgeQueuesByDBTaskID(dbTaskID uint64) (int, int, error) {
+    inspector := ts.newInspector()
+    defer inspector.Close()
+    if inspector == nil {
+        return 0, 0, fmt.Errorf("inspector init failed")
+    }
+
+    removed := 0
+    canceled := 0
+    queue := "default"
+
+    // helper: 删除匹配任务
+    deleteMatches := func(tasks []*asynq.TaskInfo) {
+        for _, ti := range tasks {
+            if ti == nil || ti.Type != BotMsgType || len(ti.Payload) == 0 {
+                continue
+            }
+            if parseTaskIDFromPayload(ti.Payload) == dbTaskID || strings.Contains(string(ti.Payload), fmt.Sprintf("任务ID：%d", dbTaskID)) {
+                if err := inspector.DeleteTask(ti.Queue, ti.ID); err == nil {
+                    removed++
+                } else {
+                    logger.Error("删除队列任务失败", "error", err, "queue", ti.Queue, "id", ti.ID)
+                }
+            }
+        }
+    }
+
+    // helper: 分页扫描方法
+    scan := func(list func(string, ...asynq.ListOption) ([]*asynq.TaskInfo, error)) {
+        page := 1
+        for {
+            items, err := list(queue, asynq.Page(page), asynq.PageSize(100))
+            if err != nil {
+                logger.Error("扫描队列失败", "error", err)
+                return
+            }
+            if len(items) == 0 {
+                return
+            }
+            deleteMatches(items)
+            if len(items) < 100 {
+                return
+            }
+            page++
+        }
+    }
+
+    // pending
+    scan(inspector.ListPendingTasks)
+    // scheduled
+    scan(inspector.ListScheduledTasks)
+    // retry
+    scan(inspector.ListRetryTasks)
+    // archived
+    scan(inspector.ListArchivedTasks)
+    // completed
+    scan(inspector.ListCompletedTasks)
+
+    // active（无法直接删除，仅发送取消信号）
+    {
+        page := 1
+        for {
+            items, err := inspector.ListActiveTasks(queue, asynq.Page(page), asynq.PageSize(100))
+            if err != nil {
+                logger.Error("扫描active队列失败", "error", err)
+                break
+            }
+            if len(items) == 0 {
+                break
+            }
+            for _, ti := range items {
+                if ti == nil || ti.Type != BotMsgType || len(ti.Payload) == 0 {
+                    continue
+                }
+                if parseTaskIDFromPayload(ti.Payload) == dbTaskID || strings.Contains(string(ti.Payload), fmt.Sprintf("任务ID：%d", dbTaskID)) {
+                    if err := inspector.CancelProcessing(ti.ID); err == nil {
+                        canceled++
+                    } else {
+                        logger.Error("取消active任务失败", "error", err, "id", ti.ID)
+                    }
+                }
+            }
+            if len(items) < 100 {
+                break
+            }
+            page++
+        }
+    }
+
+    return removed, canceled, nil
+}
+
 // DeleteScheduledByDBTaskID 删除一次性定时任务（Scheduled队列）
 func (ts *JobService) DeleteScheduledByDBTaskID(dbTaskID uint64) error {
     inspector := ts.newInspector()
@@ -334,34 +430,36 @@ func (ts *JobService) processTask(ctx context.Context, task *asynq.Task) error {
     // 从payload解析 DB 任务ID
     dbTaskID := parseTaskIDFromPayload(payload)
 
-    // 过期检查（优先依据payload中的expireTime；缺失则从DB读取；缺失即视为失败）
+    // 过期检查
     var expireAt *time.Time
+    var requiresExpire bool
+    var dbTask model.Task
     if t, ok := parseExpireTimeFromPayload(payload); ok {
         expireAt = t
-    } else {
-        // 兼容：从DB读取
-        if dbTaskID > 0 && ts.db != nil {
-            var dbTask model.Task
-            if err := ts.db.Where("id = ? AND is_delete = 0", dbTaskID).First(&dbTask).Error; err == nil {
-                if dbTask.ExpireTime != nil {
-                    expireAt = dbTask.ExpireTime
-                }
+    }
+    if dbTaskID > 0 && ts.db != nil {
+        // 读取任务类型与DB到期时间
+        if err := ts.db.Select("trigger_type", "expire_time", "cron_expression").Where("id = ? AND is_delete = 0", dbTaskID).First(&dbTask).Error; err == nil {
+            // 仅周期任务需要强制过期检查；定时执行任务不需要到期日期
+            requiresExpire = dbTask.TriggerType == model.TriggerTypeCron
+            if expireAt == nil && dbTask.ExpireTime != nil {
+                expireAt = dbTask.ExpireTime
             }
         }
     }
-
     if dbTaskID > 0 {
-        // 若未能解析到有效的过期时间：按“默认失败”处理
-        if expireAt == nil {
-            ts.markExpiredAndCleanup(dbTaskID, "缺少ExpireTime")
-            return nil
+        // 仅在需要时（cron）进行过期校验
+        if requiresExpire {
+            if expireAt == nil {
+                ts.markExpiredAndCleanup(dbTaskID, "缺少ExpireTime")
+                return nil
+            }
+            if !time.Now().Before(*expireAt) { // now >= expireAt
+                ts.markExpiredAndCleanup(dbTaskID, "任务已到期")
+                return nil
+            }
         }
-        // 若已过期
-        if !time.Now().Before(*expireAt) { // now >= expireAt
-            ts.markExpiredAndCleanup(dbTaskID, "任务已过期")
-            return nil
-        }
-        // 未过期：标记执行中
+        // 标记执行中
         ts.updateTaskExecuting(dbTaskID)
     }
 
@@ -425,23 +523,35 @@ func parseExpireTimeFromPayload(payload []byte) (*time.Time, bool) {
 
 // 标记任务为过期失败，并做清理（cron卸载）
 func (ts *JobService) markExpiredAndCleanup(taskID uint64, msg string) {
-    if ts.db != nil {
-        now := time.Now()
-        _ = ts.db.Model(&model.Task{}).
-            Where("id = ? AND is_delete = 0", taskID).
-            Updates(map[string]interface{}{
-                "status":        3,
-                "error_message": msg,
-                "last_executed_at": &now,
-                "update_time":   now,
-            }).Error
-        // 如果是cron任务，则卸载后续调度
-        var t model.Task
-        if err := ts.db.Select("trigger_type", "cron_expression").Where("id = ?", taskID).First(&t).Error; err == nil {
-            if t.TriggerType == model.TriggerTypeCron && t.CronExpression != "" {
-                _, _ = ts.UnregisterCronByTask(t.CronExpression, taskID)
-            }
-        }
+    if ts.db == nil {
+        return
+    }
+    now := time.Now()
+    // 先读取任务类型，以确定过期后的状态
+    var t model.Task
+    _ = ts.db.Select("trigger_type", "cron_expression").Where("id = ? AND is_delete = 0", taskID).First(&t).Error
+
+    updates := map[string]interface{}{
+        "next_execute_at":  nil,
+        "last_executed_at": &now,
+        "update_time":      now,
+    }
+    if t.TriggerType == model.TriggerTypeCron {
+        // 周期任务到期：标记已完成
+        updates["status"] = 2
+        updates["error_message"] = ""
+    } else {
+        // 其他情况（如一次性任务或数据异常）：按失败处理
+        updates["status"] = 3
+        updates["error_message"] = msg
+    }
+    _ = ts.db.Model(&model.Task{}).
+        Where("id = ? AND is_delete = 0", taskID).
+        Updates(updates).Error
+
+    // 周期任务到期需要卸载后续调度
+    if t.TriggerType == model.TriggerTypeCron && t.CronExpression != "" {
+        _, _ = ts.UnregisterCronByTask(t.CronExpression, taskID)
     }
 }
 
@@ -449,11 +559,13 @@ func (ts *JobService) updateTaskExecuting(taskID uint64) {
     if ts.db == nil {
         return
     }
+    now := time.Now()
     _ = ts.db.Model(&model.Task{}).
-        Where("id = ? AND is_delete = 0 AND status <> 1", taskID).
+        Where("id = ? AND is_delete = 0", taskID).
         Updates(map[string]interface{}{
-            "status":      1,
-            "update_time": time.Now(),
+            "status":            1,
+            "last_executed_at": &now,
+            "update_time":      now,
         }).Error
 }
 
@@ -467,7 +579,7 @@ func (ts *JobService) updateTaskOnSuccess(taskID uint64) {
     }
     now := time.Now()
     updates := map[string]interface{}{
-        "status":           2,
+        // 默认成功：一次性任务在分支中设为完成；周期任务保持执行中
         "execute_count":    t.ExecuteCount + 1,
         "retry_count":      0,
         "error_message":    "",
@@ -475,8 +587,12 @@ func (ts *JobService) updateTaskOnSuccess(taskID uint64) {
         "update_time":      now,
     }
     if t.TriggerType == model.TriggerTypeSchedule {
+        // 一次性任务：成功后置为完成
+        updates["status"] = 2
         updates["next_execute_at"] = nil
     } else if t.TriggerType == model.TriggerTypeCron && t.CronExpression != "" {
+        // 周期任务：保持执行中，计算下一次执行时间
+        updates["status"] = 1
         cu := toolsCron.NewCronUtils()
         if next, err := cu.CalculateNextExecution(t.CronExpression, now); err == nil {
             updates["next_execute_at"] = next
@@ -502,9 +618,15 @@ func (ts *JobService) updateTaskOnFailure(taskID uint64, execErr error) {
         "last_executed_at": &now,
         "update_time":   now,
     }
-    backoff := computeBackoff(newRetry)
-    next := now.Add(backoff)
-    updates["next_execute_at"] = &next
+    // 一次性定时任务：不再设置下一次执行时间
+    if t.TriggerType == model.TriggerTypeSchedule {
+        updates["next_execute_at"] = nil
+    } else {
+        // 周期任务失败：按退避计算下一次执行时间
+        backoff := computeBackoff(newRetry)
+        next := now.Add(backoff)
+        updates["next_execute_at"] = &next
+    }
     _ = ts.db.Model(&model.Task{}).Where("id = ?", taskID).Updates(updates).Error
 }
 

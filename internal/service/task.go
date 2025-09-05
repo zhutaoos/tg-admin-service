@@ -64,10 +64,10 @@ func (t *TaskServiceImpl) CreateTask(req *request.CreateTaskRequest, adminID uin
 		return nil, errors.New("周期执行类型必须指定Cron表达式")
 	}
 
-	// 校验任务到期时间（必填）
-	if req.GetExpireTime() == nil {
-		return nil, errors.New("任务到期时间必填")
-	}
+    // 到期时间仅在周期任务（cron）必填；定时执行（schedule）不需要到期日期
+    if req.TriggerType == model.TriggerTypeCron && req.GetExpireTime() == nil {
+        return nil, errors.New("周期执行类型必须指定到期时间")
+    }
 
     // 验证 Cron 表达式
     if req.TriggerType == model.TriggerTypeCron {
@@ -94,7 +94,8 @@ func (t *TaskServiceImpl) CreateTask(req *request.CreateTaskRequest, adminID uin
         AdminID:         adminID,
         TriggerType:     req.TriggerType,
         ScheduleTime:    req.GetScheduleTime(),
-        ExpireTime:      req.GetExpireTime(),
+        // 定时执行任务不设置到期时间；周期任务保存到期时间
+        ExpireTime:      func() *time.Time { if req.TriggerType == model.TriggerTypeCron { return req.GetExpireTime() }; return nil }(),
         CronExpression:  cronExpr,
         CronPatternType: req.CronPatternType,
         ExecuteCount:    0,
@@ -244,10 +245,7 @@ func (t *TaskServiceImpl) DeleteTask(req *request.DeleteTaskRequest, adminID uin
         return err
     }
 
-    // 允许删除：待提交(-1)、待执行(0) 和 失败(3)
-    if task.Status != -1 && task.Status != 0 && task.Status != 3 {
-        return errors.New("只有待提交、待执行和失败状态的任务可以删除")
-    }
+    // 放开状态限制：任何状态均支持删除（软删除）
 
     // 软删除标记
     updates := map[string]interface{}{
@@ -258,17 +256,26 @@ func (t *TaskServiceImpl) DeleteTask(req *request.DeleteTaskRequest, adminID uin
         return err
     }
 
-    // 同步移除 asynq 中的对应任务
+    // 清理 asynq 队列（所有状态），并根据任务类型做对应卸载
     go func(taskCopy model.Task) {
         defer func() { recover() }()
+        // 定时一次性任务：删除 Scheduled 队列中的固定ID任务
         if taskCopy.TriggerType == model.TriggerTypeSchedule {
             if err := t.jobService.DeleteScheduledByDBTaskID(taskCopy.ID); err != nil {
                 logger.Error("移除一次性定时任务失败", "error", err, "taskID", taskCopy.ID)
             }
-        } else if taskCopy.TriggerType == model.TriggerTypeCron && taskCopy.CronExpression != "" {
+        }
+        // 周期任务：卸载 Scheduler 条目
+        if taskCopy.TriggerType == model.TriggerTypeCron && taskCopy.CronExpression != "" {
             if _, err := t.jobService.UnregisterCronByTask(taskCopy.CronExpression, taskCopy.ID); err != nil {
                 logger.Error("卸载cron任务失败", "error", err, "taskID", taskCopy.ID)
             }
+        }
+        // 兜底：清理所有队列中与该DB任务关联的任务（pending/active/scheduled/retry/archived/completed）
+        if removed, canceled, err := t.jobService.PurgeQueuesByDBTaskID(taskCopy.ID); err != nil {
+            logger.Error("清理Asynq队列任务失败", "error", err, "taskID", taskCopy.ID)
+        } else {
+            logger.System("已清理Asynq队列任务", "removed", removed, "canceled_active", canceled, "taskID", taskCopy.ID)
         }
     }(*task)
 
@@ -425,19 +432,14 @@ func (t *TaskServiceImpl) SubmitTask(req *request.SubmitTaskRequest, adminID uin
         updates["next_execute_at"] = next
     }
 
-    // 提交时校验到期时间
-    if task.ExpireTime == nil {
-        return nil, errors.New("任务到期时间必填")
-    }
-    if task.ExpireTime.Before(now) || task.ExpireTime.Equal(now) {
-        return nil, errors.New("任务到期时间已过期")
-    }
-    if task.TriggerType == model.TriggerTypeSchedule && task.ScheduleTime != nil {
-        if !task.ExpireTime.After(*task.ScheduleTime) {
-            return nil, errors.New("到期时间必须晚于执行时间")
-        }
-    }
+    // 提交时校验到期时间：仅周期任务需要
     if task.TriggerType == model.TriggerTypeCron {
+        if task.ExpireTime == nil {
+            return nil, errors.New("周期任务到期时间必填")
+        }
+        if task.ExpireTime.Before(now) || task.ExpireTime.Equal(now) {
+            return nil, errors.New("任务到期时间已过期")
+        }
         if next, ok := updates["next_execute_at"].(*time.Time); ok && next != nil {
             if !task.ExpireTime.After(*next) {
                 return nil, errors.New("到期时间必须晚于下一次执行时间")

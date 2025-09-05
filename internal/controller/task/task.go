@@ -142,14 +142,16 @@ func (tc *TaskController) TaskList(ctx *gin.Context) {
 		return
 	}
 
-	// 构建响应数据
-	data := map[string]interface{}{
-		"list":  taskListVO.List,
-		"total": taskListVO.Total,
-		"page":  req.Page,
-		"limit": req.Limit,
-		"pages": (taskListVO.Total + int64(req.Limit) - 1) / int64(req.Limit),
-	}
+    // 构建响应数据（加入驼峰分页字段，兼容旧字段）
+    data := map[string]interface{}{
+        "list":      taskListVO.List,
+        "total":     taskListVO.Total,
+        "page":      req.Page,
+        "limit":     req.Limit, // 兼容旧字段
+        "pages":     (taskListVO.Total + int64(req.Limit) - 1) / int64(req.Limit), // 兼容旧字段
+        "pageSize":  req.Limit,
+        "pageCount": (taskListVO.Total + int64(req.Limit) - 1) / int64(req.Limit),
+    }
 
 	(&resp.JsonResp{Code: resp.ReSuccess, Msg: "获取任务列表成功", Data: data}).Response()
 }
