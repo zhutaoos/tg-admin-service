@@ -10,6 +10,10 @@ import (
 	"app/internal/controller/task"
 	"app/internal/controller/user"
 	"app/internal/job"
+    "app/internal/queue"
+    botregistry "app/internal/provider/botregistry"
+    telegram "app/internal/provider/telegram"
+    "context"
 
 	"go.uber.org/fx"
 )
@@ -24,6 +28,14 @@ var InfrastructureModule = fx.Options(
         NewDatabase,
         NewRedis,
         job.NewJobService, // 异步任务服务 (*asynqTask.TaskService)
+        // 队列与发送提供者
+        func() *queue.Config { return queue.DefaultConfig() },
+        queue.NewLimiter,
+        queue.NewProducer,
+        queue.NewMover,
+        queue.NewWorker,
+        telegram.NewClient,
+        botregistry.NewRegistry,
 		// Service层Provider
 		NewUserService,
 		NewAdminService,
@@ -38,6 +50,17 @@ var InfrastructureModule = fx.Options(
     fx.Invoke(
         job.NewBotMsgHandler, // 注册Bot消息处理器
         job.NewTaskRestorer,  // 启动时恢复任务
+        // 启动Mover与Worker
+        func(lc fx.Lifecycle, mover *queue.Mover, worker *queue.Worker) {
+            lc.Append(fx.Hook{
+                OnStart: func(ctx context.Context) error {
+                    go func() { _ = mover.Run(context.Background()) }()
+                    go func() { _ = worker.Run(context.Background()) }()
+                    return nil
+                },
+                OnStop: func(ctx context.Context) error { return nil },
+            })
+        },
     ),
 )
 
