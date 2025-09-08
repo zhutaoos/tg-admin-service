@@ -29,7 +29,7 @@ var InfrastructureModule = fx.Options(
         NewRedis,
         job.NewJobService, // 异步任务服务 (*asynqTask.TaskService)
         // 队列与发送提供者
-        func() *queue.Config { return queue.DefaultConfig() },
+        NewQueueConfig,
         queue.NewLimiter,
         queue.NewProducer,
         queue.NewMover,
@@ -52,13 +52,23 @@ var InfrastructureModule = fx.Options(
         job.NewTaskRestorer,  // 启动时恢复任务
         // 启动Mover与Worker
         func(lc fx.Lifecycle, mover *queue.Mover, worker *queue.Worker) {
+            var cancelMover context.CancelFunc
+            var cancelWorker context.CancelFunc
             lc.Append(fx.Hook{
                 OnStart: func(ctx context.Context) error {
-                    go func() { _ = mover.Run(context.Background()) }()
-                    go func() { _ = worker.Run(context.Background()) }()
+                    mctx, mcancel := context.WithCancel(context.Background())
+                    wctx, wcancel := context.WithCancel(context.Background())
+                    cancelMover = mcancel
+                    cancelWorker = wcancel
+                    go func() { _ = mover.Run(mctx) }()
+                    go func() { _ = worker.Run(wctx) }()
                     return nil
                 },
-                OnStop: func(ctx context.Context) error { return nil },
+                OnStop: func(ctx context.Context) error {
+                    if cancelMover != nil { cancelMover() }
+                    if cancelWorker != nil { cancelWorker() }
+                    return nil
+                },
             })
         },
     ),

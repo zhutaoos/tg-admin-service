@@ -110,6 +110,8 @@ func (w *Worker) handleOne(ctx context.Context, stream string, msg redis.XMessag
     }
     // 若无可用bot，延时重投
     if choose == "" {
+        // 当无候选或均不可用时，minWaitMs 可能未被更新，此时使用保底回退
+        if minWaitMs == 1<<62 || minWaitMs <= 0 { minWaitMs = 500 }
         if minWaitMs < 100 { minWaitMs = 100 }
         j.Attempts++
         score := now.Add(time.Duration(minWaitMs) * time.Millisecond).UnixMilli()
