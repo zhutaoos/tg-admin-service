@@ -46,6 +46,19 @@ go build -o tg-admin-service
 
 # Cross-platform builds (see deploy/deploy.sh)
 cd deploy && ./deploy.sh tg-admin-service linux amd64 0
+# Usage: ./deploy.sh <project_name> <goos> <goarch> <cgo_enabled>
+```
+
+### Testing
+```bash
+# Run all tests
+go test ./...
+
+# Run specific package tests
+go test ./tools/cron
+
+# Run tests with verbose output
+go test -v ./...
 ```
 
 ### Testing Cron Tasks
@@ -75,6 +88,13 @@ Models auto-migrate on startup when `-initDb=true` is used. Configuration files 
 
 ## Common API Endpoints
 - `/api/task/create` - Create cron tasks
-- `/api/admin/login` - Admin authentication
+- `/api/admin/login` - Admin authentication  
 - `/api/index/health` - Health check
 - All endpoints return standardized JSON format with Chinese messages
+
+## Important Notes
+- **Module name**: The go.mod declares module as `app` (not the directory name)
+- **Timezone**: All scheduling and logging uses Asia/Shanghai timezone
+- **FX Dependency Injection**: Uses Uber FX for dependency injection and lifecycle management
+- **Database**: Auto-migration occurs on startup with `-initDb=true` flag
+- **Background Jobs**: Uses Asynq for Redis-based task queues and scheduling
