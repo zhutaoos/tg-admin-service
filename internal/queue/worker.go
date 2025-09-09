@@ -34,21 +34,22 @@ type Worker struct {
     limiter  *Limiter
     tg       TelegramProvider
     registry BotRegistry
+    shard    string
     consumer string
 }
 
-func NewWorker(rdb *redis.Client, cfg *Config, limiter *Limiter, tg TelegramProvider, registry BotRegistry) *Worker {
-    return &Worker{rdb: rdb, cfg: cfg, limiter: limiter, tg: tg, registry: registry, consumer: genConsumerName()}
+func NewWorker(rdb *redis.Client, cfg *Config, limiter *Limiter, tg TelegramProvider, registry BotRegistry, shard string) *Worker {
+    return &Worker{rdb: rdb, cfg: cfg, limiter: limiter, tg: tg, registry: registry, shard: shard, consumer: genConsumerName()}
 }
 
 func (w *Worker) ensureGroup(ctx context.Context) {
-    _ = w.rdb.XGroupCreateMkStream(ctx, streamReady(w.cfg.Shard), consumerGroup(w.cfg.Shard), "$" ).Err()
+    _ = w.rdb.XGroupCreateMkStream(ctx, streamReady(w.shard), consumerGroup(w.shard), "$" ).Err()
 }
 
 func (w *Worker) Run(ctx context.Context) error {
     w.ensureGroup(ctx)
-    stream := streamReady(w.cfg.Shard)
-    group := consumerGroup(w.cfg.Shard)
+    stream := streamReady(w.shard)
+    group := consumerGroup(w.shard)
     for {
         select {
         case <-ctx.Done():
@@ -116,8 +117,8 @@ func (w *Worker) handleOne(ctx context.Context, stream string, msg redis.XMessag
         j.Attempts++
         score := now.Add(time.Duration(minWaitMs) * time.Millisecond).UnixMilli()
         b, _ := json.Marshal(j)
-        _ = w.rdb.ZAdd(ctx, zsetDelayed(w.cfg.Shard), redis.Z{Score: float64(score), Member: string(b)}).Err()
-        _ = w.rdb.XAck(ctx, stream, consumerGroup(w.cfg.Shard), msg.ID).Err()
+        _ = w.rdb.ZAdd(ctx, zsetDelayed(w.shard), redis.Z{Score: float64(score), Member: string(b)}).Err()
+        _ = w.rdb.XAck(ctx, stream, consumerGroup(w.shard), msg.ID).Err()
         return
     }
     // 发送
@@ -130,27 +131,27 @@ func (w *Worker) handleOne(ctx context.Context, stream string, msg redis.XMessag
         }
         // 每群间隔
         w.limiter.SetPerChatGap(ctx, choose, j.ChatID, now.Add(time.Duration(w.cfg.PerChatMinGapMs)*time.Millisecond).UnixMilli())
-        _ = w.rdb.XAck(ctx, stream, consumerGroup(w.cfg.Shard), msg.ID).Err()
+        _ = w.rdb.XAck(ctx, stream, consumerGroup(w.shard), msg.ID).Err()
     case SendTooManyRequests:
         // 429：按 retry_after 退避
         if retryAfter <= 0 { retryAfter = 1 }
         j.Attempts++
         score := now.Add(time.Duration(retryAfter) * time.Second).UnixMilli()
         b, _ := json.Marshal(j)
-        _ = w.rdb.ZAdd(ctx, zsetDelayed(w.cfg.Shard), redis.Z{Score: float64(score), Member: string(b)}).Err()
+        _ = w.rdb.ZAdd(ctx, zsetDelayed(w.shard), redis.Z{Score: float64(score), Member: string(b)}).Err()
         // 也更新chat限流，避免短时间再选此chat
         w.limiter.SetPerChatGap(ctx, choose, j.ChatID, now.Add(time.Duration(retryAfter)*time.Second).UnixMilli())
-        _ = w.rdb.XAck(ctx, stream, consumerGroup(w.cfg.Shard), msg.ID).Err()
+        _ = w.rdb.XAck(ctx, stream, consumerGroup(w.shard), msg.ID).Err()
     case SendRetryable:
         j.Attempts++
         delay := ComputeBackoff(j.Attempts)
         score := now.Add(delay).UnixMilli()
         b, _ := json.Marshal(j)
-        _ = w.rdb.ZAdd(ctx, zsetDelayed(w.cfg.Shard), redis.Z{Score: float64(score), Member: string(b)}).Err()
-        _ = w.rdb.XAck(ctx, stream, consumerGroup(w.cfg.Shard), msg.ID).Err()
+        _ = w.rdb.ZAdd(ctx, zsetDelayed(w.shard), redis.Z{Score: float64(score), Member: string(b)}).Err()
+        _ = w.rdb.XAck(ctx, stream, consumerGroup(w.shard), msg.ID).Err()
     case SendFatal:
         // 记录失败后ACK（此处仅ACK）
-        _ = w.rdb.XAck(ctx, stream, consumerGroup(w.cfg.Shard), msg.ID).Err()
+        _ = w.rdb.XAck(ctx, stream, consumerGroup(w.shard), msg.ID).Err()
     }
 }
 

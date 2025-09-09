@@ -2,28 +2,30 @@ package vo
 
 // 机器人配置数据结构
 type BotConfigVo struct {
-	Id               uint          `json:"id"`
-	Type             int64         `json:"type"`
-	Region           string        `json:"region"`
-	Name             string        `json:"name"`                  // 机器人名称
-	Token            string        `json:"token"`                 // 机器人token
-	GroupID          int64         `json:"groupId"`               // 群组ID
-	InviteLink       string        `json:"inviteLink"`            // 群组邀请链接
-	SubscribeChannel string        `json:"subscribeChannelLink"`  // 订阅频道链接
-	GroupNamePrefix  string        `json:"groupNamePrefix"`       // 群组名称前缀
-	BotFeature       *BotFeatureVo `json:"botFeatures,omitempty"` // 机器人功能配置
+    Id               uint          `json:"id"`
+    Type             int64         `json:"type"`
+    TypeText         string        `json:"typeText"`
+    Region           string        `json:"region"`
+    Name             string        `json:"name"`                  // 机器人名称
+    Token            string        `json:"token"`                 // 机器人token
+    GroupID          int64         `json:"groupId"`               // 群组ID
+    InviteLink       string        `json:"inviteLink"`            // 群组邀请链接
+    SubscribeChannel string        `json:"subscribeChannelLink"`  // 订阅频道链接
+    GroupNamePrefix  string        `json:"groupNamePrefix"`       // 群组名称前缀
+    BotFeature       *BotFeatureVo `json:"botFeatures,omitempty"` // 机器人功能配置
 }
 
-// 机器人配置数据结构
+// 机器人配置列表数据结构
 type BotConfigListVo struct {
-	Id              uint          `json:"id"`
-	Type            int64         `json:"type"`
-	Region          string        `json:"region"`
-	Name            string        `json:"name"`            // 机器人名称
-	GroupID         int64         `json:"groupId"`         // 群组ID
-	GroupNamePrefix string        `json:"groupNamePrefix"` // 群组名称前缀
-	CreateTime      string        `json:"createTime"`
-	BotFeature      *BotFeatureVo `json:"bot_feature,omitempty"` // 机器人功能配置
+    Id              uint          `json:"id"`
+    Type            int64         `json:"type"`
+    TypeText        string        `json:"typeText"`
+    Region          string        `json:"region"`
+    Name            string        `json:"name"`            // 机器人名称
+    GroupID         int64         `json:"groupId"`         // 群组ID
+    GroupNamePrefix string        `json:"groupNamePrefix"` // 群组名称前缀
+    CreateTime      string        `json:"createTime"`
+    BotFeature      *BotFeatureVo `json:"bot_feature,omitempty"` // 机器人功能配置
 }
 
 // BotFeatureVo 机器人功能配置响应

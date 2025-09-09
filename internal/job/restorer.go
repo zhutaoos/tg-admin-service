@@ -54,12 +54,14 @@ func restoreTasks(db *gorm.DB, js *JobService) error {
             continue
         }
 
-        // 使用结构化payload并带taskId，保持与执行链路一致
+        // 使用结构化payload并带taskId与群组/消息ID，保持与执行链路一致
         var exp string
         if t.ExpireTime != nil {
             exp = t.ExpireTime.In(time.Local).Format("2006-01-02 15:04:05")
         }
-        payload, _ := CreateJSONPayload(BotMsgPayload{MsgType: "cron_restore", Content: fmt.Sprintf("恢复注册-任务ID：%d", t.ID), TaskID: t.ID, ExpireTime: exp})
+        gids := t.GroupIDs.Int64s()
+        mids := t.MessageIDs.Uint64s()
+        payload, _ := CreateJSONPayload(BotMsgPayload{MsgType: "cron_restore", GroupIds: gids, MessageIds: mids, TaskID: t.ID, ExpireTime: exp})
         if _, err := js.AddCronTask(cronExpr, BotMsgType, payload); err != nil {
             logger.Error("恢复注册cron任务失败", "error", err, "taskID", t.ID, "cron", cronExpr)
             continue

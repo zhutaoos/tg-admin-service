@@ -10,17 +10,18 @@ import (
 
 // Mover 将到期的ZSET作业搬到Stream
 type Mover struct {
-    rdb *redis.Client
-    cfg *Config
+    rdb   *redis.Client
+    cfg   *Config
+    shard string
 }
 
-func NewMover(rdb *redis.Client, cfg *Config) *Mover { return &Mover{rdb: rdb, cfg: cfg} }
+func NewMover(rdb *redis.Client, cfg *Config, shard string) *Mover { return &Mover{rdb: rdb, cfg: cfg, shard: shard} }
 
 func (m *Mover) Run(ctx context.Context) error {
     ticker := time.NewTicker(time.Duration(m.cfg.MoverIntervalMs) * time.Millisecond)
     defer ticker.Stop()
-    zdel := zsetDelayed(m.cfg.Shard)
-    stream := streamReady(m.cfg.Shard)
+    zdel := zsetDelayed(m.shard)
+    stream := streamReady(m.shard)
     for {
         select {
         case <-ctx.Done():
@@ -80,4 +81,3 @@ func fmtI64(x int64) string {
     if neg { i--; buf[i] = '-' }
     return string(buf[i:])
 }
-

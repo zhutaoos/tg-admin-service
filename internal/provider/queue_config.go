@@ -9,8 +9,8 @@ import (
 func NewQueueConfig(conf *config.Config) *queue.Config {
     cfg := queue.DefaultConfig()
 
-    if v := config.Get[string](conf, "queue", "shard"); v != "" {
-        cfg.Shard = v
+    if v := config.Get[int](conf, "queue", "shard_count"); v > 0 {
+        cfg.ShardCount = v
     }
     if v := config.Get[int](conf, "queue", "global_rate_per_sec"); v > 0 {
         cfg.GlobalRatePerSec = v
@@ -32,4 +32,3 @@ func NewQueueConfig(conf *config.Config) *queue.Config {
     }
     return cfg
 }
-

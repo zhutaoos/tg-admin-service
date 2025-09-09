@@ -15,10 +15,10 @@ type Producer struct {
 
 func NewProducer(rdb *redis.Client, cfg *Config) *Producer { return &Producer{rdb: rdb, cfg: cfg} }
 
-// EnsureGroup 确保消费组存在
-func (p *Producer) EnsureGroup(ctx context.Context) error {
-    stream := streamReady(p.cfg.Shard)
-    group := consumerGroup(p.cfg.Shard)
+// EnsureGroupFor 确保指定分片的消费组存在
+func (p *Producer) EnsureGroupFor(ctx context.Context, shard string) error {
+    stream := streamReady(shard)
+    group := consumerGroup(shard)
     // XGROUP CREATE mkstream
     if err := p.rdb.XGroupCreateMkStream(ctx, stream, group, "$" /* latest */).Err(); err != nil {
         // 忽略已存在的错误
@@ -30,11 +30,11 @@ func (p *Producer) EnsureGroup(ctx context.Context) error {
     return nil
 }
 
-// Backlog 读取就绪/延迟/待处理（pending）数量
-func (p *Producer) Backlog(ctx context.Context) (ready, delayed, pending int64) {
-    stream := streamReady(p.cfg.Shard)
-    zdel := zsetDelayed(p.cfg.Shard)
-    group := consumerGroup(p.cfg.Shard)
+// Backlog 读取指定分片的就绪/延迟/待处理（pending）数量
+func (p *Producer) Backlog(ctx context.Context, shard string) (ready, delayed, pending int64) {
+    stream := streamReady(shard)
+    zdel := zsetDelayed(shard)
+    group := consumerGroup(shard)
 
     ready = p.rdb.XLen(ctx, stream).Val()
     delayed = p.rdb.ZCard(ctx, zdel).Val()
@@ -51,64 +51,66 @@ func (p *Producer) EnqueueJobs(ctx context.Context, jobs []Job) error {
     if len(jobs) == 0 {
         return nil
     }
-    // 确保组存在（容忍已存在错误）
-    _ = p.EnsureGroup(ctx)
-
-    ready, delayed, pending := p.Backlog(ctx)
-    backlog := ready + delayed + pending
-    // 估算阈值
-    cap := int64(p.cfg.GlobalRatePerSec * p.cfg.HorizonSec)
-    // group近似：不同chat数量
-    uniqChats := map[int64]struct{}{}
-    for _, j := range jobs { uniqChats[j.ChatID] = struct{}{} }
-    limit := cap
-    if gc := int64(len(uniqChats) * 2); gc > limit { limit = gc }
-
-    now := time.Now()
-    stream := streamReady(p.cfg.Shard)
-    zdel := zsetDelayed(p.cfg.Shard)
-
-    if backlog > limit {
-        // 计算延迟秒
-        over := backlog - limit
-        if over < 0 { over = 0 }
-        delaySec := int64(over)/int64(p.cfg.GlobalRatePerSec)
-        if delaySec < 1 { delaySec = 1 }
-        score := now.Add(time.Duration(delaySec) * time.Second).UnixMilli()
-        // 批量写入 ZSET（存储为JSON串）
-        zs := make([]*redis.Z, 0, len(jobs))
-        for _, j := range jobs {
-            b, _ := json.Marshal(j)
-            zs = append(zs, &redis.Z{Score: float64(score), Member: string(b)})
-        }
-        return p.rdb.ZAdd(ctx, zdel, zs...).Err()
+    // 按分片分组
+    buckets := make(map[string][]Job)
+    for _, j := range jobs {
+        shard := p.cfg.ShardFor(j.ChatID)
+        buckets[shard] = append(buckets[shard], j)
     }
 
-    // 直接写入Stream
-    for _, j := range jobs {
-        fields := map[string]interface{}{
-            "jid":        j.JID,
-            "task_id":    j.TaskID,
-            "msg_idx":    j.MsgIdx,
-            "chat_id":    j.ChatID,
-            "payload":    j.Payload,
-            "idem":       j.Idem,
-            "attempts":   j.Attempts,
-            "created_at": j.CreatedAtMs,
+    now := time.Now()
+    for shard, items := range buckets {
+        // 确保该分片消费组存在
+        _ = p.EnsureGroupFor(ctx, shard)
+
+        ready, delayed, pending := p.Backlog(ctx, shard)
+        backlog := ready + delayed + pending
+        // 分片内阈值估算
+        cap := int64(p.cfg.GlobalRatePerSec * p.cfg.HorizonSec)
+        uniq := map[int64]struct{}{}
+        for _, j := range items { uniq[j.ChatID] = struct{}{} }
+        limit := cap
+        if gc := int64(len(uniq) * 2); gc > limit { limit = gc }
+
+        stream := streamReady(shard)
+        zdel := zsetDelayed(shard)
+
+        if backlog > limit {
+            // 计算延迟秒
+            over := backlog - limit
+            if over < 0 { over = 0 }
+            delaySec := int64(over)/int64(p.cfg.GlobalRatePerSec)
+            if delaySec < 1 { delaySec = 1 }
+            score := now.Add(time.Duration(delaySec) * time.Second).UnixMilli()
+            // 批量写入 ZSET（存储为JSON串）
+            zs := make([]redis.Z, 0, len(items))
+            for _, j := range items {
+                b, _ := json.Marshal(j)
+                zs = append(zs, redis.Z{Score: float64(score), Member: string(b)})
+            }
+            if err := p.rdb.ZAdd(ctx, zdel, zs...).Err(); err != nil { return err }
+            continue
         }
-        if len(j.BotCandidates) > 0 {
-            b, _ := json.Marshal(j.BotCandidates)
-            fields["bot_candidates"] = string(b)
-        }
-        // XADD
-        if err := p.rdb.XAdd(ctx, &redis.XAddArgs{
-            Stream: stream,
-            Values: fields,
-            // MaxLen 设为近似修剪（0表示不修剪）
-            Approx: true,
-            MaxLen: p.cfg.StreamMaxLen,
-        }).Err(); err != nil {
-            return err
+
+        // 直接写入Stream
+        for _, j := range items {
+            fields := map[string]interface{}{
+                "jid":        j.JID,
+                "task_id":    j.TaskID,
+                "msg_idx":    j.MsgIdx,
+                "chat_id":    j.ChatID,
+                "payload":    j.Payload,
+                "idem":       j.Idem,
+                "attempts":   j.Attempts,
+                "created_at": j.CreatedAtMs,
+            }
+            if len(j.BotCandidates) > 0 {
+                b, _ := json.Marshal(j.BotCandidates)
+                fields["bot_candidates"] = string(b)
+            }
+            if err := p.rdb.XAdd(ctx, &redis.XAddArgs{Stream: stream, Values: fields, Approx: true, MaxLen: p.cfg.StreamMaxLen}).Err(); err != nil {
+                return err
+            }
         }
     }
     return nil

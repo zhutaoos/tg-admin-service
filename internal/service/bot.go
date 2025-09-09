@@ -32,13 +32,13 @@ func (s *BotService) CreateBotConfig(ctx context.Context, request request.Create
 		return err
 	}
 
-	botConfig := &model.BotConfig{
-		AdminId: userid,
-		Type:    *request.Type,
-		GroupID: request.GroupID,
-		Region:  request.Region,
-		Config:  configJSON,
-	}
+    botConfig := &model.BotConfig{
+        AdminId: userid,
+        Type:    *request.Type,
+        GroupID: request.GroupID,
+        Region:  request.Region,
+        Config:  configJSON,
+    }
 
 	return s.db.WithContext(ctx).Create(botConfig).Error
 }
@@ -100,28 +100,29 @@ func (s *BotService) GetBotConfigData(ctx context.Context, id int64, userId uint
 	}
 
 	// 构建响应数据
-	configData := &vo.BotConfigVo{
-		Id:               botConfig.ID,
-		Type:             botConfig.Type,
-		Region:           botConfig.Region,
-		Name:             requestData.Name,
-		Token:            requestData.Token,
-		GroupID:          requestData.GroupID,
-		InviteLink:       requestData.InviteLink,
-		SubscribeChannel: requestData.SubscribeChannel,
-		GroupNamePrefix:  requestData.GroupNamePrefix,
-	}
+    configData := &vo.BotConfigVo{
+        Id:               botConfig.ID,
+        Type:             int64(botConfig.Type),
+        TypeText:         botConfig.Type.String(),
+        Region:           botConfig.Region,
+        Name:             requestData.Name,
+        Token:            requestData.Token,
+        GroupID:          requestData.GroupID,
+        InviteLink:       requestData.InviteLink,
+        SubscribeChannel: requestData.SubscribeChannel,
+        GroupNamePrefix:  requestData.GroupNamePrefix,
+    }
 
 	// 解析 BotFeature 数据
-	if len(botConfig.Features) > 0 {
-		var botFeature vo.BotFeatureVo
-		err = json.Unmarshal(botConfig.Features, &botFeature)
-		if err != nil {
-			logger.Error("解析机器人功能配置数据失败，数据: %s, 错误: %s", string(botConfig.Features), err.Error())
-		} else {
-			configData.BotFeature = &botFeature
-		}
-	}
+    if len(botConfig.Features) > 0 {
+        var botFeature vo.BotFeatureVo
+        err = json.Unmarshal(botConfig.Features, &botFeature)
+        if err != nil {
+            logger.Error("解析机器人功能配置数据失败，数据: %s, 错误: %s", string(botConfig.Features), err.Error())
+        } else {
+            configData.BotFeature = &botFeature
+        }
+    }
 
 	return configData, nil
 }
@@ -142,9 +143,9 @@ func (s *BotService) SearchBotConfig(ctx context.Context, request request.Search
 	if request.Region != "" {
 		query = query.Where("region = ?", request.Region)
 	}
-	if request.Type != nil {
-		query = query.Where("type = ?", request.Type)
-	}
+    if request.Type != nil {
+        query = query.Where("type = ?", *request.Type)
+    }
 	query.Where("admin_id = ?", userId)
 	err := query.Count(&total).Error
 
@@ -160,8 +161,11 @@ func (s *BotService) SearchBotConfig(ctx context.Context, request request.Search
 	}
 
 	for _, botConfig := range botConfigs {
-		var configData vo.BotConfigListVo
-		copier.Copy(&configData, botConfig)
+        var configData vo.BotConfigListVo
+        copier.Copy(&configData, botConfig)
+        // 强制纠正类型与文案
+        configData.Type = int64(botConfig.Type)
+        configData.TypeText = botConfig.Type.String()
 
 		var cfgData dto.BotConfigData
 		err := json.Unmarshal(botConfig.Config, &cfgData)
@@ -172,16 +176,16 @@ func (s *BotService) SearchBotConfig(ctx context.Context, request request.Search
 		configData.GroupNamePrefix = cfgData.GroupNamePrefix
 		configData.CreateTime = botConfig.CreateTime.Format("2006-01-02 15:04:05")
 
-		// 解析 BotFeature 数据
-		if len(botConfig.Features) > 0 {
-			var botFeature vo.BotFeatureVo
-			err := json.Unmarshal(botConfig.Features, &botFeature)
-			if err != nil {
-				logger.Error("解析机器人功能配置数据失败错误信息: %s", err.Error())
-			} else {
-				configData.BotFeature = &botFeature
-			}
-		}
+        // 解析 BotFeature 数据
+        if len(botConfig.Features) > 0 {
+            var botFeature vo.BotFeatureVo
+            err := json.Unmarshal(botConfig.Features, &botFeature)
+            if err != nil {
+                logger.Error("解析机器人功能配置数据失败错误信息: %s", err.Error())
+            } else {
+                configData.BotFeature = &botFeature
+            }
+        }
 
 		result = append(result, configData)
 	}

@@ -1,57 +1,57 @@
 package service
 
 import (
-    "app/internal/job"
-    "app/internal/model"
-    "app/internal/request"
-    "app/internal/vo"
-    "app/tools/cron"
-    "app/tools/logger"
-    "encoding/json"
-    "errors"
-    "fmt"
-    "strings"
-    "time"
+	"app/internal/job"
+	"app/internal/model"
+	"app/internal/request"
+	"app/internal/vo"
+	"app/tools/cron"
+	"app/tools/logger"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"strings"
+	"time"
 
-    "github.com/hibiken/asynq"
-    "gorm.io/gorm"
+	"github.com/hibiken/asynq"
+	"gorm.io/gorm"
 )
 
 // TaskService 任务服务接口
 type TaskService interface {
-    CreateTask(req *request.CreateTaskRequest, adminID uint) (*vo.TaskVo, error)
-    UpdateTask(req *request.UpdateTaskRequest, adminID uint) (*vo.TaskVo, error)
-    DeleteTask(req *request.DeleteTaskRequest, adminID uint) error
-    GetTaskByID(id uint64, adminID uint) (*vo.TaskVo, error)
-    ListTasks(req *request.TaskListRequest, adminID uint) (*vo.TaskListVo, error)
-    GetTaskStats(adminID uint) (*vo.TaskStatsVo, error)
-    SubmitTask(req *request.SubmitTaskRequest, adminID uint) (*vo.TaskVo, error)
+	CreateTask(req *request.CreateTaskRequest, adminID uint) (*vo.TaskVo, error)
+	UpdateTask(req *request.UpdateTaskRequest, adminID uint) (*vo.TaskVo, error)
+	DeleteTask(req *request.DeleteTaskRequest, adminID uint) error
+	GetTaskByID(id uint64, adminID uint) (*vo.TaskVo, error)
+	ListTasks(req *request.TaskListRequest, adminID uint) (*vo.TaskListVo, error)
+	GetTaskStats(adminID uint) (*vo.TaskStatsVo, error)
+	SubmitTask(req *request.SubmitTaskRequest, adminID uint) (*vo.TaskVo, error)
 }
 
 type TaskServiceImpl struct {
-    db         *gorm.DB
-    cronUtils  *cron.CronUtils
-    jobService *job.JobService
+	db         *gorm.DB
+	cronUtils  *cron.CronUtils
+	jobService *job.JobService
 }
 
 // NewTaskService 创建TaskService实例
 func NewTaskService(db *gorm.DB, jobService *job.JobService) TaskService {
-    return &TaskServiceImpl{
-        db:         db,
-        cronUtils:  cron.NewCronUtils(),
-        jobService: jobService,
-    }
+	return &TaskServiceImpl{
+		db:         db,
+		cronUtils:  cron.NewCronUtils(),
+		jobService: jobService,
+	}
 }
 
 // normalizeCronTo5 将6位（含秒）cron表达式规整为5位（去秒）。
 func (t *TaskServiceImpl) normalizeCronTo5(expr string) (string, bool) {
-    fields := strings.Fields(expr)
-    if len(fields) == 6 {
-        normalized := strings.Join(fields[1:], " ")
-        logger.System("检测到6字段Cron，保存前转换为5字段", "原始", expr, "转换后", normalized)
-        return normalized, true
-    }
-    return expr, false
+	fields := strings.Fields(expr)
+	if len(fields) == 6 {
+		normalized := strings.Join(fields[1:], " ")
+		logger.System("检测到6字段Cron，保存前转换为5字段", "原始", expr, "转换后", normalized)
+		return normalized, true
+	}
+	return expr, false
 }
 
 // CreateTask 创建任务
@@ -64,50 +64,73 @@ func (t *TaskServiceImpl) CreateTask(req *request.CreateTaskRequest, adminID uin
 		return nil, errors.New("周期执行类型必须指定Cron表达式")
 	}
 
-    // 到期时间仅在周期任务（cron）必填；定时执行（schedule）不需要到期日期
-    if req.TriggerType == model.TriggerTypeCron && req.GetExpireTime() == nil {
-        return nil, errors.New("周期执行类型必须指定到期时间")
-    }
+	// 到期时间仅在周期任务（cron）必填；定时执行（schedule）不需要到期日期
+	if req.TriggerType == model.TriggerTypeCron && req.GetExpireTime() == nil {
+		return nil, errors.New("周期执行类型必须指定到期时间")
+	}
 
-    // 验证 Cron 表达式
-    if req.TriggerType == model.TriggerTypeCron {
-        if valid, errMsg := t.cronUtils.ValidateCronExpression(req.CronExpression); !valid {
-            return nil, errors.New("Cron表达式格式错误: " + errMsg)
-        }
-    }
+	// 验证 Cron 表达式
+	if req.TriggerType == model.TriggerTypeCron {
+		if valid, errMsg := t.cronUtils.ValidateCronExpression(req.CronExpression); !valid {
+			return nil, errors.New("Cron表达式格式错误: " + errMsg)
+		}
+	}
 
-    // 规整Cron为5位后再保存（仅cron类型保留），schedule类型不保存表达式
-    cronExpr := req.CronExpression
-    if req.TriggerType == model.TriggerTypeCron && cronExpr != "" {
-        if normalized, changed := t.normalizeCronTo5(cronExpr); changed {
-            cronExpr = normalized
-        }
-    } else if req.TriggerType == model.TriggerTypeSchedule {
-        cronExpr = ""
-    }
+	// 规整Cron为5位后再保存（仅cron类型保留），schedule类型不保存表达式
+	cronExpr := req.CronExpression
+	if req.TriggerType == model.TriggerTypeCron && cronExpr != "" {
+		if normalized, changed := t.normalizeCronTo5(cronExpr); changed {
+			cronExpr = normalized
+		}
+	} else if req.TriggerType == model.TriggerTypeSchedule {
+		cronExpr = ""
+	}
 
 	// 构建任务模型
-    task := &model.Task{
-        TaskName:        req.TaskName,
-        Description:     req.Description,
-        Status:          -1, // 待提交
-        AdminID:         adminID,
-        TriggerType:     req.TriggerType,
-        ScheduleTime:    req.GetScheduleTime(),
-        // 定时执行任务不设置到期时间；周期任务保存到期时间
-        ExpireTime:      func() *time.Time { if req.TriggerType == model.TriggerTypeCron { return req.GetExpireTime() }; return nil }(),
-        CronExpression:  cronExpr,
-        CronPatternType: req.CronPatternType,
-        ExecuteCount:    0,
-        RetryCount:      0,
-        MaxRetryCount:   req.MaxRetryCount,
-        CreateTime:      time.Now(),
-        UpdateTime:      time.Now(),
-    }
+	task := &model.Task{
+		TaskName:     req.TaskName,
+		Description:  req.Description,
+		Status:       -1, // 待提交
+		AdminID:      adminID,
+		TriggerType:  req.TriggerType,
+		ScheduleTime: req.GetScheduleTime(),
+		// 定时执行任务不设置到期时间；周期任务保存到期时间
+		ExpireTime: func() *time.Time {
+			if req.TriggerType == model.TriggerTypeCron {
+				return req.GetExpireTime()
+			}
+			return nil
+		}(),
+		CronExpression:  cronExpr,
+		CronPatternType: req.CronPatternType,
+		ExecuteCount:    0,
+		RetryCount:      0,
+		MaxRetryCount:   req.MaxRetryCount,
+		CreateTime:      time.Now(),
+		UpdateTime:      time.Now(),
+	}
+	if req.GroupIDs == nil {
+		return nil, errors.New("群组ID不能为空")
+	}
 
-	// 如果未设置最大重试次数，默认为3次
-	if task.MaxRetryCount == 0 {
-		task.MaxRetryCount = 3
+	// 校验所选群组是否已配置机器人（基于 admin_id + group_id）
+	// 需求：根据 adminid、type、groupid 判断是否有对应的群组机器人记录
+	// 现阶段 CreateTask 请求未携带机器人 type，先校验 admin_id + group_id 存在性；
+	// 后续如引入 type，可在 where 条件中追加 type 过滤。
+	missing := make([]int64, 0)
+	for _, gid := range req.GroupIDs {
+		var cnt int64
+		if err := t.db.Model(&model.BotConfig{}).
+			Where("admin_id = ? AND group_id = ? and type=?", adminID, gid, model.BotTypeBroadcast).
+			Count(&cnt).Error; err != nil {
+			return nil, err
+		}
+		if cnt == 0 {
+			missing = append(missing, gid)
+		}
+	}
+	if len(missing) > 0 {
+		return nil, fmt.Errorf("以下群组未配置机器人，请先完成配置: %v", missing)
 	}
 
 	// 处理JSON字段
@@ -116,6 +139,11 @@ func (t *TaskServiceImpl) CreateTask(req *request.CreateTaskRequest, adminID uin
 		return nil, errors.New("群组ID序列化失败")
 	}
 	task.GroupIDs = model.JSON(groupIDsJSON)
+
+	// 如果未设置最大重试次数，默认为3次
+	if task.MaxRetryCount == 0 {
+		task.MaxRetryCount = 3
+	}
 
 	messageIDsJSON, err := json.Marshal(req.MessageIDs)
 	if err != nil {
@@ -131,73 +159,73 @@ func (t *TaskServiceImpl) CreateTask(req *request.CreateTaskRequest, adminID uin
 		task.CronConfig = model.JSON(cronConfigJSON)
 	}
 
-    // 不在创建阶段计算 next_execute_at；改为提交阶段计算
+	// 不在创建阶段计算 next_execute_at；改为提交阶段计算
 
-    // 保存任务（创建阶段不入队，待提交后入队）
-    if err := t.db.Create(task).Error; err != nil {
-        return nil, err
-    }
+	// 保存任务（创建阶段不入队，待提交后入队）
+	if err := t.db.Create(task).Error; err != nil {
+		return nil, err
+	}
 	// 转换为VO
 	return t.taskToVO(task), nil
 }
 
 // UpdateTask 更新任务
 func (t *TaskServiceImpl) UpdateTask(req *request.UpdateTaskRequest, adminID uint) (*vo.TaskVo, error) {
-    // 查找任务
-    task := &model.Task{}
-    if err := t.db.Where("id = ? AND admin_id = ? AND is_delete = 0", req.ID, adminID).First(task).Error; err != nil {
-        if errors.Is(err, gorm.ErrRecordNotFound) {
-            return nil, errors.New("任务不存在或无权限操作")
-        }
-        return nil, err
-    }
+	// 查找任务
+	task := &model.Task{}
+	if err := t.db.Where("id = ? AND admin_id = ? AND is_delete = 0", req.ID, adminID).First(task).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, errors.New("任务不存在或无权限操作")
+		}
+		return nil, err
+	}
 
-    // 更新前旧值若需用于校验，可在此读取（当前策略：不做调度同步）
+	// 更新前旧值若需用于校验，可在此读取（当前策略：不做调度同步）
 
-    // 前端默认不允许编辑；若后续允许，仅支持待提交状态编辑
-    if task.Status != -1 {
-        return nil, errors.New("当前状态不允许编辑（仅待提交可编辑）")
-    }
+	// 前端默认不允许编辑；若后续允许，仅支持待提交状态编辑
+	if task.Status != -1 {
+		return nil, errors.New("当前状态不允许编辑（仅待提交可编辑）")
+	}
 
-    // 参数验证
-    if req.TriggerType == model.TriggerTypeSchedule && req.GetScheduleTime() == nil {
-        return nil, errors.New("定时执行类型必须指定执行时间")
-    }
-    if req.TriggerType == model.TriggerTypeCron && req.CronExpression == "" {
-        return nil, errors.New("周期执行类型必须指定Cron表达式")
-    }
+	// 参数验证
+	if req.TriggerType == model.TriggerTypeSchedule && req.GetScheduleTime() == nil {
+		return nil, errors.New("定时执行类型必须指定执行时间")
+	}
+	if req.TriggerType == model.TriggerTypeCron && req.CronExpression == "" {
+		return nil, errors.New("周期执行类型必须指定Cron表达式")
+	}
 
 	// 验证 Cron 表达式
-    if req.TriggerType == model.TriggerTypeCron {
-        if valid, errMsg := t.cronUtils.ValidateCronExpression(req.CronExpression); !valid {
-            return nil, errors.New("Cron表达式格式错误: " + errMsg)
-        }
-    }
+	if req.TriggerType == model.TriggerTypeCron {
+		if valid, errMsg := t.cronUtils.ValidateCronExpression(req.CronExpression); !valid {
+			return nil, errors.New("Cron表达式格式错误: " + errMsg)
+		}
+	}
 
-    // 规整Cron为5位（仅cron类型保留），schedule类型不保存表达式
-    cronExpr := req.CronExpression
-    if req.TriggerType == model.TriggerTypeCron && cronExpr != "" {
-        if normalized, changed := t.normalizeCronTo5(cronExpr); changed {
-            cronExpr = normalized
-        }
-    } else if req.TriggerType == model.TriggerTypeSchedule {
-        cronExpr = ""
-    }
+	// 规整Cron为5位（仅cron类型保留），schedule类型不保存表达式
+	cronExpr := req.CronExpression
+	if req.TriggerType == model.TriggerTypeCron && cronExpr != "" {
+		if normalized, changed := t.normalizeCronTo5(cronExpr); changed {
+			cronExpr = normalized
+		}
+	} else if req.TriggerType == model.TriggerTypeSchedule {
+		cronExpr = ""
+	}
 
 	// 更新字段
-    updates := map[string]interface{}{
-        "task_name":         req.TaskName,
-        "description":       req.Description,
-        "trigger_type":      req.TriggerType,
-        "schedule_time":     req.GetScheduleTime(),
-        "cron_expression":   cronExpr,
-        "cron_pattern_type": req.CronPatternType,
-        "max_retry_count":   req.MaxRetryCount,
-        "update_time":       time.Now(),
-    }
+	updates := map[string]interface{}{
+		"task_name":         req.TaskName,
+		"description":       req.Description,
+		"trigger_type":      req.TriggerType,
+		"schedule_time":     req.GetScheduleTime(),
+		"cron_expression":   cronExpr,
+		"cron_pattern_type": req.CronPatternType,
+		"max_retry_count":   req.MaxRetryCount,
+		"update_time":       time.Now(),
+	}
 
-    // 处理JSON字段
-    groupIDsJSON, err := json.Marshal(req.GroupIDs)
+	// 处理JSON字段
+	groupIDsJSON, err := json.Marshal(req.GroupIDs)
 	if err != nil {
 		return nil, errors.New("群组ID序列化失败")
 	}
@@ -217,80 +245,80 @@ func (t *TaskServiceImpl) UpdateTask(req *request.UpdateTaskRequest, adminID uin
 		updates["cron_config"] = model.JSON(cronConfigJSON)
 	}
 
-    // 不在更新阶段计算 next_execute_at；改为提交阶段计算
+	// 不在更新阶段计算 next_execute_at；改为提交阶段计算
 
-    // 执行更新
-    if err := t.db.Model(task).Updates(updates).Error; err != nil {
-        return nil, err
-    }
+	// 执行更新
+	if err := t.db.Model(task).Updates(updates).Error; err != nil {
+		return nil, err
+	}
 
 	// 重新查询更新后的数据
-    if err := t.db.Where("id = ?", req.ID).First(task).Error; err != nil {
-        return nil, err
-    }
+	if err := t.db.Where("id = ?", req.ID).First(task).Error; err != nil {
+		return nil, err
+	}
 
-    // 当前策略：创建/更新阶段不入队，提交时统一入队
+	// 当前策略：创建/更新阶段不入队，提交时统一入队
 
-    return t.taskToVO(task), nil
+	return t.taskToVO(task), nil
 }
 
 // DeleteTask 删除任务
 func (t *TaskServiceImpl) DeleteTask(req *request.DeleteTaskRequest, adminID uint) error {
-    // 查找任务
-    task := &model.Task{}
-    if err := t.db.Where("id = ? AND admin_id = ? AND is_delete = 0", req.ID, adminID).First(task).Error; err != nil {
-        if errors.Is(err, gorm.ErrRecordNotFound) {
-            return errors.New("任务不存在或无权限操作")
-        }
-        return err
-    }
+	// 查找任务
+	task := &model.Task{}
+	if err := t.db.Where("id = ? AND admin_id = ? AND is_delete = 0", req.ID, adminID).First(task).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return errors.New("任务不存在或无权限操作")
+		}
+		return err
+	}
 
-    // 放开状态限制：任何状态均支持删除（软删除）
+	// 放开状态限制：任何状态均支持删除（软删除）
 
-    // 软删除标记
-    updates := map[string]interface{}{
-        "is_delete":  1,
-        "update_time": time.Now(),
-    }
-    if err := t.db.Model(task).Updates(updates).Error; err != nil {
-        return err
-    }
+	// 软删除标记
+	updates := map[string]interface{}{
+		"is_delete":   1,
+		"update_time": time.Now(),
+	}
+	if err := t.db.Model(task).Updates(updates).Error; err != nil {
+		return err
+	}
 
-    // 清理 asynq 队列（所有状态），并根据任务类型做对应卸载
-    go func(taskCopy model.Task) {
-        defer func() { recover() }()
-        // 定时一次性任务：删除 Scheduled 队列中的固定ID任务
-        if taskCopy.TriggerType == model.TriggerTypeSchedule {
-            if err := t.jobService.DeleteScheduledByDBTaskID(taskCopy.ID); err != nil {
-                logger.Error("移除一次性定时任务失败", "error", err, "taskID", taskCopy.ID)
-            }
-        }
-        // 周期任务：卸载 Scheduler 条目
-        if taskCopy.TriggerType == model.TriggerTypeCron && taskCopy.CronExpression != "" {
-            if _, err := t.jobService.UnregisterCronByTask(taskCopy.CronExpression, taskCopy.ID); err != nil {
-                logger.Error("卸载cron任务失败", "error", err, "taskID", taskCopy.ID)
-            }
-        }
-        // 兜底：清理所有队列中与该DB任务关联的任务（pending/active/scheduled/retry/archived/completed）
-        if removed, canceled, err := t.jobService.PurgeQueuesByDBTaskID(taskCopy.ID); err != nil {
-            logger.Error("清理Asynq队列任务失败", "error", err, "taskID", taskCopy.ID)
-        } else {
-            logger.System("已清理Asynq队列任务", "removed", removed, "canceled_active", canceled, "taskID", taskCopy.ID)
-        }
-    }(*task)
+	// 清理 asynq 队列（所有状态），并根据任务类型做对应卸载
+	go func(taskCopy model.Task) {
+		defer func() { recover() }()
+		// 定时一次性任务：删除 Scheduled 队列中的固定ID任务
+		if taskCopy.TriggerType == model.TriggerTypeSchedule {
+			if err := t.jobService.DeleteScheduledByDBTaskID(taskCopy.ID); err != nil {
+				logger.Error("移除一次性定时任务失败", "error", err, "taskID", taskCopy.ID)
+			}
+		}
+		// 周期任务：卸载 Scheduler 条目
+		if taskCopy.TriggerType == model.TriggerTypeCron && taskCopy.CronExpression != "" {
+			if _, err := t.jobService.UnregisterCronByTask(taskCopy.CronExpression, taskCopy.ID); err != nil {
+				logger.Error("卸载cron任务失败", "error", err, "taskID", taskCopy.ID)
+			}
+		}
+		// 兜底：清理所有队列中与该DB任务关联的任务（pending/active/scheduled/retry/archived/completed）
+		if removed, canceled, err := t.jobService.PurgeQueuesByDBTaskID(taskCopy.ID); err != nil {
+			logger.Error("清理Asynq队列任务失败", "error", err, "taskID", taskCopy.ID)
+		} else {
+			logger.System("已清理Asynq队列任务", "removed", removed, "canceled_active", canceled, "taskID", taskCopy.ID)
+		}
+	}(*task)
 
-    return nil
+	return nil
 }
 
 // GetTaskByID 根据ID获取任务详情
 func (t *TaskServiceImpl) GetTaskByID(id uint64, adminID uint) (*vo.TaskVo, error) {
-    task := &model.Task{}
-    if err := t.db.Where("id = ? AND admin_id = ? AND is_delete = 0", id, adminID).First(task).Error; err != nil {
-        if errors.Is(err, gorm.ErrRecordNotFound) {
-            return nil, errors.New("任务不存在或无权限查看")
-        }
-        return nil, err
-    }
+	task := &model.Task{}
+	if err := t.db.Where("id = ? AND admin_id = ? AND is_delete = 0", id, adminID).First(task).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, errors.New("任务不存在或无权限查看")
+		}
+		return nil, err
+	}
 
 	return t.taskToVO(task), nil
 }
@@ -308,7 +336,7 @@ func (t *TaskServiceImpl) ListTasks(req *request.TaskListRequest, adminID uint) 
 	var tasks []model.Task
 	var total int64
 
-    query := t.db.Model(&model.Task{}).Where("admin_id = ? AND is_delete = 0", adminID)
+	query := t.db.Model(&model.Task{}).Where("admin_id = ? AND is_delete = 0", adminID)
 
 	// 构建查询条件
 	if req.Status != nil {
@@ -376,117 +404,120 @@ func (t *TaskServiceImpl) ListTasks(req *request.TaskListRequest, adminID uint) 
 
 // GetTaskStats 获取任务统计信息
 func (t *TaskServiceImpl) GetTaskStats(adminID uint) (*vo.TaskStatsVo, error) {
-    stats := &vo.TaskStatsVo{}
+	stats := &vo.TaskStatsVo{}
 
-    // 总数
-    if err := t.db.Model(&model.Task{}).Where("admin_id = ? AND is_delete = 0", adminID).Count(&stats.TotalCount).Error; err != nil {
-        return nil, err
-    }
+	// 总数
+	if err := t.db.Model(&model.Task{}).Where("admin_id = ? AND is_delete = 0", adminID).Count(&stats.TotalCount).Error; err != nil {
+		return nil, err
+	}
 
-    // 各状态统计（仅未删除）
-    if err := t.db.Model(&model.Task{}).Where("admin_id = ? AND status = ? AND is_delete = 0", adminID, 0).Count(&stats.PendingCount).Error; err != nil {
-        return nil, err
-    }
-    if err := t.db.Model(&model.Task{}).Where("admin_id = ? AND status = ? AND is_delete = 0", adminID, 1).Count(&stats.RunningCount).Error; err != nil {
-        return nil, err
-    }
-    if err := t.db.Model(&model.Task{}).Where("admin_id = ? AND status = ? AND is_delete = 0", adminID, 2).Count(&stats.CompletedCount).Error; err != nil {
-        return nil, err
-    }
-    if err := t.db.Model(&model.Task{}).Where("admin_id = ? AND status = ? AND is_delete = 0", adminID, 3).Count(&stats.FailedCount).Error; err != nil {
-        return nil, err
-    }
+	// 各状态统计（仅未删除）
+	if err := t.db.Model(&model.Task{}).Where("admin_id = ? AND status = ? AND is_delete = 0", adminID, 0).Count(&stats.PendingCount).Error; err != nil {
+		return nil, err
+	}
+	if err := t.db.Model(&model.Task{}).Where("admin_id = ? AND status = ? AND is_delete = 0", adminID, 1).Count(&stats.RunningCount).Error; err != nil {
+		return nil, err
+	}
+	if err := t.db.Model(&model.Task{}).Where("admin_id = ? AND status = ? AND is_delete = 0", adminID, 2).Count(&stats.CompletedCount).Error; err != nil {
+		return nil, err
+	}
+	if err := t.db.Model(&model.Task{}).Where("admin_id = ? AND status = ? AND is_delete = 0", adminID, 3).Count(&stats.FailedCount).Error; err != nil {
+		return nil, err
+	}
 
 	return stats, nil
 }
 
 // SubmitTask 提交任务：将待提交(-1)的任务变为待执行(0)并注册到asynq
 func (t *TaskServiceImpl) SubmitTask(req *request.SubmitTaskRequest, adminID uint) (*vo.TaskVo, error) {
-    // 查找任务
-    task := &model.Task{}
-    if err := t.db.Where("id = ? AND admin_id = ? AND is_delete = 0", req.ID, adminID).First(task).Error; err != nil {
-        if errors.Is(err, gorm.ErrRecordNotFound) {
-            return nil, errors.New("任务不存在或无权限操作")
-        }
-        return nil, err
-    }
+	// 查找任务
+	task := &model.Task{}
+	if err := t.db.Where("id = ? AND admin_id = ? AND is_delete = 0", req.ID, adminID).First(task).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, errors.New("任务不存在或无权限操作")
+		}
+		return nil, err
+	}
 
-    if task.Status != -1 {
-        return nil, errors.New("仅待提交状态的任务可提交")
-    }
+	if task.Status != -1 {
+		return nil, errors.New("仅待提交状态的任务可提交")
+	}
 
-    now := time.Now()
-    updates := map[string]interface{}{
-        "status":      0, // 待执行
-        "update_time": now,
-    }
+	now := time.Now()
+	updates := map[string]interface{}{
+		"status":      0, // 待执行
+		"update_time": now,
+	}
 
-    // 预计算下一次执行时间
-    if task.TriggerType == model.TriggerTypeSchedule && task.ScheduleTime != nil {
-        updates["next_execute_at"] = task.ScheduleTime
-    } else if task.TriggerType == model.TriggerTypeCron && task.CronExpression != "" {
-        next, err := t.cronUtils.CalculateNextExecution(task.CronExpression, now)
-        if err != nil {
-            return nil, errors.New("计算下次执行时间失败: " + err.Error())
-        }
-        updates["next_execute_at"] = next
-    }
+	// 预计算下一次执行时间
+	if task.TriggerType == model.TriggerTypeSchedule && task.ScheduleTime != nil {
+		updates["next_execute_at"] = task.ScheduleTime
+	} else if task.TriggerType == model.TriggerTypeCron && task.CronExpression != "" {
+		next, err := t.cronUtils.CalculateNextExecution(task.CronExpression, now)
+		if err != nil {
+			return nil, errors.New("计算下次执行时间失败: " + err.Error())
+		}
+		updates["next_execute_at"] = next
+	}
 
-    // 提交时校验到期时间：仅周期任务需要
-    if task.TriggerType == model.TriggerTypeCron {
-        if task.ExpireTime == nil {
-            return nil, errors.New("周期任务到期时间必填")
-        }
-        if task.ExpireTime.Before(now) || task.ExpireTime.Equal(now) {
-            return nil, errors.New("任务到期时间已过期")
-        }
-        if next, ok := updates["next_execute_at"].(*time.Time); ok && next != nil {
-            if !task.ExpireTime.After(*next) {
-                return nil, errors.New("到期时间必须晚于下一次执行时间")
-            }
-        }
-    }
+	// 提交时校验到期时间：仅周期任务需要
+	if task.TriggerType == model.TriggerTypeCron {
+		if task.ExpireTime == nil {
+			return nil, errors.New("周期任务到期时间必填")
+		}
+		if task.ExpireTime.Before(now) || task.ExpireTime.Equal(now) {
+			return nil, errors.New("任务到期时间已过期")
+		}
+		if next, ok := updates["next_execute_at"].(*time.Time); ok && next != nil {
+			if !task.ExpireTime.After(*next) {
+				return nil, errors.New("到期时间必须晚于下一次执行时间")
+			}
+		}
+	}
 
-    if err := t.db.Model(task).Updates(updates).Error; err != nil {
-        return nil, err
-    }
+	if err := t.db.Model(task).Updates(updates).Error; err != nil {
+		return nil, err
+	}
 
-    // 注册到asynq
+	// 注册到asynq
     var expireStr string
     if task.ExpireTime != nil {
         expireStr = task.ExpireTime.In(time.Local).Format("2006-01-02 15:04:05")
     }
+    gids := task.GroupIDs.Int64s()
+    mids := task.MessageIDs.Uint64s()
     payload, _ := job.CreateJSONPayload(job.BotMsgPayload{
         MsgType:    "bot_msg",
-        Content:    fmt.Sprintf("任务提交，任务ID：%d", task.ID),
+        MessageIds: mids,
+        GroupIds:   gids,
         TaskID:     task.ID,
         ExpireTime: expireStr,
     })
-    if task.TriggerType == model.TriggerTypeSchedule {
-        if task.ScheduleTime == nil {
-            return nil, errors.New("定时任务必须设置执行时间")
-        }
-        if task.ScheduleTime.Before(now) {
-            return nil, errors.New("执行时间已过期")
-        }
-        taskID := fmt.Sprintf("schedule:%d", task.ID)
-        if _, err := t.jobService.ScheduleTaskWithID(job.BotMsgType, payload, *task.ScheduleTime, taskID, asynq.MaxRetry(task.MaxRetryCount)); err != nil {
-            return nil, fmt.Errorf("注册一次性任务失败: %v", err)
-        }
-    } else if task.TriggerType == model.TriggerTypeCron {
-        if task.CronExpression == "" {
-            return nil, errors.New("周期任务必须设置Cron表达式")
-        }
-        if _, err := t.jobService.AddCronTask(task.CronExpression, job.BotMsgType, payload, asynq.MaxRetry(task.MaxRetryCount)); err != nil {
-            return nil, fmt.Errorf("注册周期任务失败: %v", err)
-        }
-    }
+	if task.TriggerType == model.TriggerTypeSchedule {
+		if task.ScheduleTime == nil {
+			return nil, errors.New("定时任务必须设置执行时间")
+		}
+		if task.ScheduleTime.Before(now) {
+			return nil, errors.New("执行时间已过期")
+		}
+		taskID := fmt.Sprintf("schedule:%d", task.ID)
+		if _, err := t.jobService.ScheduleTaskWithID(job.BotMsgType, payload, *task.ScheduleTime, taskID, asynq.MaxRetry(task.MaxRetryCount)); err != nil {
+			return nil, fmt.Errorf("注册一次性任务失败: %v", err)
+		}
+	} else if task.TriggerType == model.TriggerTypeCron {
+		if task.CronExpression == "" {
+			return nil, errors.New("周期任务必须设置Cron表达式")
+		}
+		if _, err := t.jobService.AddCronTask(task.CronExpression, job.BotMsgType, payload, asynq.MaxRetry(task.MaxRetryCount)); err != nil {
+			return nil, fmt.Errorf("注册周期任务失败: %v", err)
+		}
+	}
 
-    // 重新查询task
-    if err := t.db.Where("id = ?", task.ID).First(task).Error; err != nil {
-        return nil, err
-    }
-    return t.taskToVO(task), nil
+	// 重新查询task
+	if err := t.db.Where("id = ?", task.ID).First(task).Error; err != nil {
+		return nil, err
+	}
+	return t.taskToVO(task), nil
 }
 
 // taskToVO 将任务模型转换为VO
@@ -509,12 +540,12 @@ func (t *TaskServiceImpl) taskToVO(task *model.Task) *vo.TaskVo {
 	}
 
 	// 转换时间字段
-    if task.ScheduleTime != nil {
-        taskVO.ScheduleTime = &vo.CustomTime{Time: *task.ScheduleTime}
-    }
-    if task.ExpireTime != nil {
-        taskVO.ExpireTime = &vo.CustomTime{Time: *task.ExpireTime}
-    }
+	if task.ScheduleTime != nil {
+		taskVO.ScheduleTime = &vo.CustomTime{Time: *task.ScheduleTime}
+	}
+	if task.ExpireTime != nil {
+		taskVO.ExpireTime = &vo.CustomTime{Time: *task.ExpireTime}
+	}
 	if task.LastExecutedAt != nil {
 		taskVO.LastExecutedAt = &vo.CustomTime{Time: *task.LastExecutedAt}
 	}
