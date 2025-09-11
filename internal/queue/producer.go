@@ -33,11 +33,11 @@ func (p *Producer) EnsureGroupFor(ctx context.Context, shard string) error {
 // Backlog 读取指定分片的就绪/延迟/待处理（pending）数量
 func (p *Producer) Backlog(ctx context.Context, shard string) (ready, delayed, pending int64) {
     stream := streamReady(shard)
-    zdel := zsetDelayed(shard)
+    zdelayed := zsetDelayed(shard)
     group := consumerGroup(shard)
 
     ready = p.rdb.XLen(ctx, stream).Val()
-    delayed = p.rdb.ZCard(ctx, zdel).Val()
+    delayed = p.rdb.ZCard(ctx, zdelayed).Val()
     // XPENDING，若不存在组则返回0
     if res := p.rdb.XPending(ctx, stream, group); res.Err() == nil {
         pinfo := res.Val()
@@ -73,7 +73,7 @@ func (p *Producer) EnqueueJobs(ctx context.Context, jobs []Job) error {
         if gc := int64(len(uniq) * 2); gc > limit { limit = gc }
 
         stream := streamReady(shard)
-        zdel := zsetDelayed(shard)
+        zdelayed := zsetDelayed(shard)
 
         if backlog > limit {
             // 计算延迟秒
@@ -88,7 +88,7 @@ func (p *Producer) EnqueueJobs(ctx context.Context, jobs []Job) error {
                 b, _ := json.Marshal(j)
                 zs = append(zs, redis.Z{Score: float64(score), Member: string(b)})
             }
-            if err := p.rdb.ZAdd(ctx, zdel, zs...).Err(); err != nil { return err }
+            if err := p.rdb.ZAdd(ctx, zdelayed, zs...).Err(); err != nil { return err }
             continue
         }
 
