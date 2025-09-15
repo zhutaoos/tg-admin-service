@@ -9,10 +9,10 @@ import (
 )
 
 type Config struct {
-	viper    *viper.Viper
-	Path     string // 配置目录
-	FileName string // 文件名
-	FileType string // 文件类型
+    viper    *viper.Viper
+    Path     string // 配置目录
+    FileName string // 文件名
+    FileType string // 文件类型
 }
 
 func (c *Config) Init() *Config {
@@ -38,9 +38,9 @@ func (c *Config) Init() *Config {
 }
 
 func Get[T conv.BuiltinT](c *Config, section, key string) T {
-	key = section + "." + key
-	var t T
-	switch any(t).(type) {
+    key = section + "." + key
+    var t T
+    switch any(t).(type) {
 	case string:
 		return any(c.viper.GetString(key)).(T)
 	case bool:
@@ -61,6 +61,15 @@ func Get[T conv.BuiltinT](c *Config, section, key string) T {
 		return any(c.viper.GetUint64(key)).(T)
 	case float64:
 		return any(c.viper.GetFloat64(key)).(T)
-	}
-	return any(c.viper.GetString(key)).(T)
+    }
+    return any(c.viper.GetString(key)).(T)
+}
+
+// IsSet 判断配置项是否在文件中显式设置（用于区分“未设置”与“设置为0/空字符串”）
+func IsSet(c *Config, section, key string) bool {
+    if c == nil || c.viper == nil {
+        return false
+    }
+    full := section + "." + key
+    return c.viper.IsSet(full)
 }

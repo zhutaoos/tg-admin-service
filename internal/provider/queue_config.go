@@ -9,26 +9,27 @@ import (
 func NewQueueConfig(conf *config.Config) *queue.Config {
     cfg := queue.DefaultConfig()
 
-    if v := config.Get[int](conf, "queue", "shard_count"); v > 0 {
-        cfg.ShardCount = v
+    // 使用 IsSet 区分“未设置”和“设置为0/空字符串”
+    if config.IsSet(conf, "queue", "shard_count") {
+        cfg.ShardCount = config.Get[int](conf, "queue", "shard_count")
     }
-    if v := config.Get[int](conf, "queue", "global_rate_per_sec"); v > 0 {
-        cfg.GlobalRatePerSec = v
+    if config.IsSet(conf, "queue", "global_rate_per_sec") {
+        cfg.GlobalRatePerSec = config.Get[int](conf, "queue", "global_rate_per_sec")
     }
-    if v := config.Get[int](conf, "queue", "per_chat_min_gap_ms"); v > 0 {
-        cfg.PerChatMinGapMs = int64(v)
+    if config.IsSet(conf, "queue", "per_chat_min_gap_ms") {
+        cfg.PerChatMinGapMs = int64(config.Get[int](conf, "queue", "per_chat_min_gap_ms"))
     }
-    if v := config.Get[int](conf, "queue", "mover_batch"); v > 0 {
-        cfg.MoverBatch = v
+    if config.IsSet(conf, "queue", "mover_batch") {
+        cfg.MoverBatch = config.Get[int](conf, "queue", "mover_batch")
     }
-    if v := config.Get[int](conf, "queue", "mover_interval_ms"); v > 0 {
-        cfg.MoverIntervalMs = v
+    if config.IsSet(conf, "queue", "mover_interval_ms") {
+        cfg.MoverIntervalMs = config.Get[int](conf, "queue", "mover_interval_ms")
     }
-    if v := config.Get[int](conf, "queue", "horizon_sec"); v > 0 {
-        cfg.HorizonSec = v
+    if config.IsSet(conf, "queue", "horizon_sec") {
+        cfg.HorizonSec = config.Get[int](conf, "queue", "horizon_sec")
     }
-    if v := config.Get[int](conf, "queue", "stream_max_len"); v > 0 {
-        cfg.StreamMaxLen = int64(v)
+    if config.IsSet(conf, "queue", "stream_max_len") {
+        cfg.StreamMaxLen = int64(config.Get[int](conf, "queue", "stream_max_len"))
     }
     return cfg
 }
