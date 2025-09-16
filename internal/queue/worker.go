@@ -5,6 +5,8 @@ import (
     "encoding/json"
     "errors"
     "fmt"
+    "strconv"
+    "sync"
     "time"
 
     "github.com/redis/go-redis/v9"
@@ -36,52 +38,175 @@ type Worker struct {
     registry BotRegistry
     shard    string
     consumer string
+    stream   string
+    group    string
+
+    // keyed worker pool
+    concurrency int
+    lanesMu     sync.Mutex
+    lanes       map[int64]*lane
+    waiting     []int64
+    waitingSet  map[int64]struct{}
+    active      int
+    wg          sync.WaitGroup
 }
 
 func NewWorker(rdb *redis.Client, cfg *Config, limiter *Limiter, tg TelegramProvider, registry BotRegistry, shard string) *Worker {
-    return &Worker{rdb: rdb, cfg: cfg, limiter: limiter, tg: tg, registry: registry, shard: shard, consumer: genConsumerName()}
+    return &Worker{
+        rdb: rdb,
+        cfg: cfg,
+        limiter: limiter,
+        tg: tg,
+        registry: registry,
+        shard: shard,
+        consumer: genConsumerName(),
+        stream: streamReady(shard),
+        group: consumerGroup(shard),
+        concurrency: cfg.WorkerConcurrency,
+        lanes: make(map[int64]*lane),
+        waitingSet: make(map[int64]struct{}),
+    }
 }
 
 func (w *Worker) ensureGroup(ctx context.Context) {
-    _ = w.rdb.XGroupCreateMkStream(ctx, streamReady(w.shard), consumerGroup(w.shard), "$" ).Err()
+    _ = w.rdb.XGroupCreateMkStream(ctx, w.stream, w.group, "$" ).Err()
 }
 
 func (w *Worker) Run(ctx context.Context) error {
     w.ensureGroup(ctx)
-    stream := streamReady(w.shard)
-    group := consumerGroup(w.shard)
     for {
         select {
         case <-ctx.Done():
+            // 等待在途 lane 退出
+            w.wg.Wait()
             return nil
         default:
-        }
-        // 拉取
-        res, err := w.rdb.XReadGroup(ctx, &redis.XReadGroupArgs{
-            Group:    group,
-            Consumer: w.consumer,
-            Streams:  []string{stream, ">"},
-            Count:    10,
-            Block:    time.Second,
-        }).Result()
-        if err != nil {
-            if errors.Is(err, redis.Nil) { continue }
-            // 其他错误短暂休眠
-            time.Sleep(200 * time.Millisecond)
-            continue
-        }
-        for _, s := range res {
-            for _, msg := range s.Messages {
-                w.handleOne(ctx, s.Stream, msg)
+            // 拉取
+            res, err := w.rdb.XReadGroup(ctx, &redis.XReadGroupArgs{
+                Group:    w.group,
+                Consumer: w.consumer,
+                Streams:  []string{w.stream, ">"},
+                Count:    32,
+                Block:    time.Second,
+            }).Result()
+            if err != nil {
+                if errors.Is(err, redis.Nil) { continue }
+                // 其他错误短暂休眠
+                time.Sleep(200 * time.Millisecond)
+                continue
+            }
+            for _, s := range res {
+                for _, msg := range s.Messages {
+                    chatID := getInt64(msg.Values["chat_id"])
+                    w.pushMsg(ctx, chatID, msg)
+                }
             }
         }
+    }
+}
+
+// lane 表示某个 chat 的串行处理车道
+type lane struct {
+    mu     sync.Mutex
+    q      []redis.XMessage
+    active bool
+    inWait bool
+}
+
+func (w *Worker) pushMsg(ctx context.Context, chatID int64, msg redis.XMessage) {
+    w.lanesMu.Lock()
+    l := w.lanes[chatID]
+    if l == nil {
+        l = &lane{}
+        w.lanes[chatID] = l
+    }
+    l.mu.Lock()
+    l.q = append(l.q, msg)
+    // 若该 lane 尚未运行且有并发余量，则立即启动
+    if !l.active && w.active < w.concurrency {
+        l.active = true
+        w.active++
+        w.wg.Add(1)
+        go w.processLane(ctx, chatID, l)
+        l.mu.Unlock()
+        w.lanesMu.Unlock()
+        return
+    }
+    // 否则加入等待队列（去重）
+    if !l.active && !l.inWait {
+        l.inWait = true
+        if _, ok := w.waitingSet[chatID]; !ok {
+            w.waitingSet[chatID] = struct{}{}
+            w.waiting = append(w.waiting, chatID)
+        }
+    }
+    l.mu.Unlock()
+    w.lanesMu.Unlock()
+}
+
+func (w *Worker) processLane(ctx context.Context, chatID int64, l *lane) {
+    defer func() {
+        w.lanesMu.Lock()
+        w.active--
+        // 尝试从 waiting 启动下一个 lane
+        for len(w.waiting) > 0 && w.active < w.concurrency {
+            next := w.waiting[0]
+            w.waiting = w.waiting[1:]
+            delete(w.waitingSet, next)
+            nl := w.lanes[next]
+            if nl == nil {
+                continue
+            }
+            nl.mu.Lock()
+            if nl.active || len(nl.q) == 0 {
+                nl.inWait = false
+                nl.mu.Unlock()
+                continue
+            }
+            nl.inWait = false
+            nl.active = true
+            w.active++
+            w.wg.Add(1)
+            go w.processLane(ctx, next, nl)
+            nl.mu.Unlock()
+            break
+        }
+        // 清理空 lane，避免 map 膨胀
+        empty := false
+        l.mu.Lock()
+        empty = !l.active && len(l.q) == 0
+        l.mu.Unlock()
+        if empty {
+            delete(w.lanes, chatID)
+        }
+        w.lanesMu.Unlock()
+        w.wg.Done()
+    }()
+
+    for {
+        // 取出一条消息处理
+        l.mu.Lock()
+        if len(l.q) == 0 {
+            l.active = false
+            l.mu.Unlock()
+            return
+        }
+        msg := l.q[0]
+        l.q = l.q[1:]
+        l.mu.Unlock()
+
+        // 保序：同一 lane 内顺序处理
+        // 为了在关闭时也能可靠完成ACK与必要的Redis操作，这里使用每条消息一个短超时背景上下文
+        opCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+        w.handleOne(opCtx, w.stream, msg)
+        cancel()
     }
 }
 
 func (w *Worker) handleOne(ctx context.Context, stream string, msg redis.XMessage) {
     // 解析字段
     var j Job
-    j.JID = getString(msg.Values["jid"]) 
+    j.ID = getString(msg.Values["id"])
     j.Payload = getString(msg.Values["payload"]) 
     j.Idem = getString(msg.Values["idem"]) 
     j.Attempts = getInt(msg.Values["attempts"]) 
@@ -187,9 +312,8 @@ func getInt64(v any) int64 {
     case int:
         return int64(x)
     case string:
-        var n int64
-        _, _ = fmtSscanfInt64(x, &n)
-        return n
+        if n, err := strconv.ParseInt(x, 10, 64); err == nil { return n }
+        return 0
     default:
         return 0
     }

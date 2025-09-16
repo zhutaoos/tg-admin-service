@@ -106,7 +106,7 @@ func (p *Producer) EnqueueJobs(ctx context.Context, jobs []Job) error {
 		// 直接写入Stream
 		for _, j := range items {
 			fields := map[string]interface{}{
-				"jid":        j.JID,
+				"id":        j.ID,
 				"task_id":    j.TaskID,
 				"msg_idx":    j.MsgIdx,
 				"chat_id":    j.ChatID,

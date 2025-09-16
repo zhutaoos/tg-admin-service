@@ -31,5 +31,8 @@ func NewQueueConfig(conf *config.Config) *queue.Config {
     if config.IsSet(conf, "queue", "stream_max_len") {
         cfg.StreamMaxLen = int64(config.Get[int](conf, "queue", "stream_max_len"))
     }
+    if config.IsSet(conf, "queue", "worker_concurrency") {
+        cfg.WorkerConcurrency = config.Get[int](conf, "queue", "worker_concurrency")
+    }
     return cfg
 }
