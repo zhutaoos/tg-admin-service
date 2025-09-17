@@ -62,182 +62,38 @@ go run main.go -mode=dev
 
 ## 队列
 
-> 队列是基于 redis 的 stream 实现的 <br> 延时队列是基于 redis 的 zset 实现的
+系统的消息发送链路依托 Redis Stream 与 ZSet：
 
-### 初始化队列
+- 即时任务写入 `tg:send:ready:<chatID>`，延迟任务写入 `tg:send:delayed:<chatID>`；
+- `Producer` 会按 chatID 将作业入队，并在首次入队时唤起对应 runner；
+- `RunnerManager` 负责维护活跃 chat 列表，按需拉起/回收 mover 与 worker，以控制资源占用；
+- `Mover` 将到期的延迟任务搬运到 stream，`Worker` 在单 chat 内顺序消费并调用 Telegram bot，所有限流信息均存储在 Redis 键中。
 
-```
-queue.Init("goingo-queue", model.RedisClient)
+### Redis 键名约定
 
-// 延时队列
-delayStream := &queue.DelayStream{}
-delayStream.SetName("default")
-err := delayStream.Create()  //（redis key name goingo-queue:delay:default）
-if err != nil {
-    fmt.Println(err.Error())
-    return
-}
-go delayStream.Loop()
+- `tg:send:ready:<chatID>`：待发送消息流
+- `tg:send:delayed:<chatID>`：延迟任务集合
+- `tg:send:cg:<chatID>`：消费组
+- `tg:lim:botcnt:<bot>:<sec>`：单 bot 全局速率窗口
+- `tg:lim:chat:<bot>:<chatID>`：单 chat 发送间隔控制
 
-// 消息队列
-stream := &queue.NormalStream{}
-stream.SetName("default")
-err := stream.Create()  //（redis key name goingo-queue:normal:default）
-if err != nil {
-    fmt.Println(err.Error())
-    return
-}
-go stream.Loop()
-```
+### 队列配置项（[queue]）
 
-### 队列投入数据
+| 配置项 | 默认值 | 说明 |
+| --- | --- | --- |
+| `global_rate_per_sec` | 25 | 单 bot 每秒允许的发送次数，0 表示不发送 |
+| `per_chat_min_gap_ms` | 1000 | 同一 chat 连续两条消息的最小间隔（毫秒） |
+| `mover_batch` | 200 | 每轮搬运的延迟任务数量上限 |
+| `mover_interval_ms` | 100 | 搬运器轮询间隔（毫秒） |
+| `horizon_sec` | 120 | 用于估算背压阈值的窗口（秒） |
+| `stream_max_len` | 0 | Stream 限长，0 表示不限制 |
+| `max_chat_runners` | 0 | 允许同时活跃的 chat runner 数量，0 表示不限制 |
+| `idle_runner_ttl_ms` | 600000 | chat runner 空闲多久后自动回收（毫秒，<=0 表示不回收） |
+| `candidate_cache_ttl_ms` | 3600000 | 候选 bot 列表缓存时间（毫秒） |
+| `failure_backoff_ms` | 60000,300000,900000,3600000,10800000,21600000,43200000,86400000 | 单 bot 连续失败退避阶梯（毫秒，逗号分隔） |
+| `failure_max_duration_ms` | 86400000 | 单 bot 连续失败允许的最长时间，超过后默认阻断（毫秒） |
 
-#### 消息队列
-
-> `queue.Push(队列名称, 回调名称, map[string]interface{}{"name": "张三", "age": 19})`
-
-#### 延时队列
-
-> `queue.PushDelay(队列名称, 回调名称, map[string]interface{}{"name": "张三", "age": 19}, 延时秒数)`
-
-### 回调与钩子
-
-#### 注册回调
-
-```
-var pF queue.CallbackFunc = func(msg *queue.Msg) *queue.CallbackResult {
-	// 业务逻辑
-	return &queue.CallbackResult{
-		Err:      nil,
-		Msg:      "",
-		Code:     0, // 0 成功，1 失败
-		BackData: nil,
-	}
-}
-queue.RegisterCallback("test", &pF)
-```
-
-#### 注册钩子
-
-```
-var u queue.HookFunc = func(stream queue.Stream, data map[string]any) *queue.HookResult {
-	_, ok := data["msg"]
-	if !ok {
-		return &queue.HookResult{
-			Err:      errors.New("nil msg"),
-			Msg:      "nil msg",
-			Code:     1,
-			BackData: nil,}
-	}
-	msg := data["msg"].(*queue.Msg)
-	_, ok = data["consumer"]
-	if !ok {
-		return &queue.HookResult{
-			Err:      errors.New("nil consumer"),
-			Msg:      "nil consumer",
-			Code:     1,
-			BackData: nil,}
-	}
-	consumer := data["consumer"].(string)
-	logger.System("CALLBACK MSG", "Msg", msg.Id, "consumer", consumer)
-	queue.Client.XDel(context.Background(), stream.FullName(), msg.Id)
-	return &queue.HookResult{
-		Err:      nil,
-		Msg:      "success",
-		Code:     0,
-		BackData: nil,
-	}
-}
-queue.RegisterHook(queue.CallbackSuccess, &u)
-```
-
-#### 钩子事件列表
-
-<ul>
-    <li>PushSuccess 队列放入数据事件</li>
-    <li>PopSuccess 队列取出数据事件</li>
-    <li>CallbackSuccess 执行回调成功事件</li>
-    <li>CallbackFail 执行回调失败事件</li>
-    <li>UndefinedCallback 未定义的 callback 事件</li>
-</ul>
-
-### 队列完整示例
-
-```go
-package main
-
-import (
-	"fmt"
-	"goingo/internal/model"
-	"goingo/tools/queue"
-)
-
-func main() {
-	logger.InitLog()
-	model.InitRedis(&model.RedisConf{
-		Ip:         "192.168.110.177",
-		Port:       "63792",
-		GlobalName: "goingo-queue",
-	})
-	queue.Init("goingo-queue", model.RedisClient)
-	stream := &queue.NormalStream{}
-	stream.SetName("default")
-	err := stream.Create() // 初始化创建队列（redis key name goingo-queue:normal:default）
-	if err != nil {
-		fmt.Println(err.Error())
-		return
-	}
-
-	// 队列投入数据，callbackName 需要通过 RegisterHook 注册回调
-	queue.Push("default", "test", map[string]interface{}{"name": "张三", "age": 19})
-
-	// 注册回调
-	var pF queue.CallbackFunc = func(msg *queue.Msg) *queue.CallbackResult {
-		// 业务逻辑
-		return &queue.CallbackResult{
-			Err:      nil,
-			Msg:      "",
-			Code:     0, // 0 成功，1 失败
-			BackData: nil,
-		}
-	}
-	queue.RegisterCallback("test", &pF)
-
-	// 注册钩子
-	var u queue.HookFunc = func(stream queue.Stream, data map[string]any) *queue.HookResult {
-		_, ok := data["msg"]
-		if !ok {
-			return &queue.HookResult{
-				Err:      errors.New("nil msg"),
-				Msg:      "nil msg",
-				Code:     1,
-				BackData: nil,
-			}
-		}
-		msg := data["msg"].(*queue.Msg)
-
-		_, ok = data["consumer"]
-		if !ok {
-			return &queue.HookResult{
-				Err:      errors.New("nil consumer"),
-				Msg:      "nil consumer",
-				Code:     1,
-				BackData: nil,
-			}
-		}
-		consumer := data["consumer"].(string)
-		logger.System("CALLBACK MSG", "Msg", msg.Id, "consumer", consumer)
-		return &queue.HookResult{
-			Err:      nil,
-			Msg:      "success",
-			Code:     0,
-			BackData: nil,
-		}
-	}
-	queue.RegisterHook(queue.CallbackSuccess, &u)
-	stream.Loop()
-}
-```
+根据业务规模调整上述参数，即可在保序与限流之间取得平衡。
 
 ## 打包上传到服务器
 

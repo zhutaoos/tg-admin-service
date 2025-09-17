@@ -1,322 +1,334 @@
 package queue
 
 import (
-    "context"
-    "encoding/json"
-    "errors"
-    "fmt"
-    "strconv"
-    "sync"
-    "time"
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"strconv"
+	"time"
 
-    "github.com/redis/go-redis/v9"
+	"github.com/redis/go-redis/v9"
 )
 
 type TelegramProvider interface {
-    Send(ctx context.Context, bot string, chatID int64, payload string) (providerMsgID string, status SendStatus, retryAfterSec int)
+	Send(ctx context.Context, bot string, chatID int64, payload string) (providerMsgID string, status SendStatus, retryAfterSec int)
 }
 
 type BotRegistry interface {
-    // 返回该chat可用的候选bot列表（bot标识或token别名）
-    Candidates(ctx context.Context, chatID int64) ([]string, error)
+	// 返回该 chat 可用的候选 bot 列表（bot 标识或 token 别名）
+	Candidates(ctx context.Context, chatID int64) ([]string, error)
 }
 
 type SendStatus int
 
 const (
-    SendOK SendStatus = iota
-    SendRetryable
-    SendTooManyRequests
-    SendFatal
+	SendOK SendStatus = iota
+	SendRetryable
+	SendTooManyRequests
+	SendFatal
 )
 
+// Worker 负责消费单个 chat 的消息流（保持顺序）
 type Worker struct {
-    rdb      *redis.Client
-    cfg      *Config
-    limiter  *Limiter
-    tg       TelegramProvider
-    registry BotRegistry
-    shard    string
-    consumer string
-    stream   string
-    group    string
+	rdb      *redis.Client
+	cfg      *Config
+	limiter  *Limiter
+	failure  *FailureTracker
+	tg       TelegramProvider
+	registry BotRegistry
 
-    // keyed worker pool
-    concurrency int
-    lanesMu     sync.Mutex
-    lanes       map[int64]*lane
-    waiting     []int64
-    waitingSet  map[int64]struct{}
-    active      int
-    wg          sync.WaitGroup
+	chatID   int64
+	consumer string
+	stream   string
+	group    string
+
+	onActive func()
+
+	candidateCache []string
+	cacheExpiry    time.Time
 }
 
-func NewWorker(rdb *redis.Client, cfg *Config, limiter *Limiter, tg TelegramProvider, registry BotRegistry, shard string) *Worker {
-    return &Worker{
-        rdb: rdb,
-        cfg: cfg,
-        limiter: limiter,
-        tg: tg,
-        registry: registry,
-        shard: shard,
-        consumer: genConsumerName(),
-        stream: streamReady(shard),
-        group: consumerGroup(shard),
-        concurrency: cfg.WorkerConcurrency,
-        lanes: make(map[int64]*lane),
-        waitingSet: make(map[int64]struct{}),
-    }
+func NewWorker(rdb *redis.Client, cfg *Config, limiter *Limiter, failure *FailureTracker, tg TelegramProvider, registry BotRegistry, chatID int64, onActive func()) *Worker {
+	return &Worker{
+		rdb:      rdb,
+		cfg:      cfg,
+		limiter:  limiter,
+		failure:  failure,
+		tg:       tg,
+		registry: registry,
+		chatID:   chatID,
+		consumer: genConsumerName(),
+		stream:   streamReady(chatID),
+		group:    consumerGroup(chatID),
+		onActive: onActive,
+	}
 }
 
 func (w *Worker) ensureGroup(ctx context.Context) {
-    _ = w.rdb.XGroupCreateMkStream(ctx, w.stream, w.group, "$" ).Err()
+	_ = w.rdb.XGroupCreateMkStream(ctx, w.stream, w.group, "$").Err()
 }
 
 func (w *Worker) Run(ctx context.Context) error {
-    w.ensureGroup(ctx)
-    for {
-        select {
-        case <-ctx.Done():
-            // 等待在途 lane 退出
-            w.wg.Wait()
-            return nil
-        default:
-            // 拉取
-            res, err := w.rdb.XReadGroup(ctx, &redis.XReadGroupArgs{
-                Group:    w.group,
-                Consumer: w.consumer,
-                Streams:  []string{w.stream, ">"},
-                Count:    32,
-                Block:    time.Second,
-            }).Result()
-            if err != nil {
-                if errors.Is(err, redis.Nil) { continue }
-                // 其他错误短暂休眠
-                time.Sleep(200 * time.Millisecond)
-                continue
-            }
-            for _, s := range res {
-                for _, msg := range s.Messages {
-                    chatID := getInt64(msg.Values["chat_id"])
-                    w.pushMsg(ctx, chatID, msg)
-                }
-            }
-        }
-    }
+	w.ensureGroup(ctx)
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		default:
+			res, err := w.rdb.XReadGroup(ctx, &redis.XReadGroupArgs{
+				Group:    w.group,
+				Consumer: w.consumer,
+				Streams:  []string{w.stream, ">"},
+				Count:    32,
+				Block:    time.Second,
+			}).Result()
+			if err != nil {
+				if errors.Is(err, redis.Nil) {
+					continue
+				}
+				time.Sleep(200 * time.Millisecond)
+				continue
+			}
+			for _, stream := range res {
+				for _, msg := range stream.Messages {
+					if w.onActive != nil {
+						w.onActive()
+					}
+					opCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+					w.handleOne(opCtx, msg)
+					cancel()
+				}
+			}
+		}
+	}
 }
 
-// lane 表示某个 chat 的串行处理车道
-type lane struct {
-    mu     sync.Mutex
-    q      []redis.XMessage
-    active bool
-    inWait bool
+func (w *Worker) handleOne(ctx context.Context, msg redis.XMessage) {
+	var j Job
+	j.ID = getString(msg.Values["id"])
+	j.Payload = getString(msg.Values["payload"])
+	j.Idem = getString(msg.Values["idem"])
+	j.Attempts = getInt(msg.Values["attempts"])
+	j.ChatID = getInt64(msg.Values["chat_id"])
+	now := time.Now()
+	nowMs := now.UnixMilli()
+
+	candidates := w.getCandidates(ctx)
+	choose := ""
+	var minWaitMs int64 = 1 << 62
+
+	for _, bot := range candidates {
+		allow, nextAllowed, blocked, err := w.failure.Allow(ctx, bot, j.ChatID, now)
+		if err != nil {
+			allow = true
+		}
+		if blocked {
+			w.pruneCandidate(bot, now)
+			continue
+		}
+		if !allow {
+			wait := nextAllowed - nowMs
+			if wait > 0 && wait < minWaitMs {
+				minWaitMs = wait
+			}
+			continue
+		}
+		if ok, wait, _ := w.limiter.CheckPerChatGap(ctx, bot, j.ChatID, now); !ok {
+			if wait > 0 && wait < minWaitMs {
+				minWaitMs = wait
+			}
+			continue
+		}
+		if ok, wait, _ := w.limiter.TryAcquireGlobal(ctx, bot, now); !ok {
+			if wait > 0 && wait < minWaitMs {
+				minWaitMs = wait
+			}
+			continue
+		}
+		choose = bot
+		break
+	}
+
+	if choose == "" {
+		if minWaitMs == 1<<62 || minWaitMs <= 0 {
+			minWaitMs = 60_000
+		}
+		if minWaitMs < 100 {
+			minWaitMs = 100
+		}
+		j.Attempts++
+		score := now.Add(time.Duration(minWaitMs) * time.Millisecond).UnixMilli()
+		body, _ := json.Marshal(j)
+		_ = w.rdb.ZAdd(ctx, zsetDelayed(w.chatID), redis.Z{Score: float64(score), Member: string(body)}).Err()
+		_ = w.rdb.XAck(ctx, w.stream, w.group, msg.ID).Err()
+		return
+	}
+
+	providerMsgID, status, retryAfter := w.tg.Send(ctx, choose, j.ChatID, j.Payload)
+	switch status {
+	case SendOK:
+		if j.Idem != "" {
+			_ = w.rdb.SetNX(ctx, keyIdem(j.Idem), providerMsgID, 24*time.Hour).Err()
+		}
+		w.failure.ReportSuccess(ctx, choose, j.ChatID)
+		nextGap := now.Add(time.Duration(w.cfg.PerChatMinGapMs) * time.Millisecond).UnixMilli()
+		w.limiter.SetPerChatGap(ctx, choose, j.ChatID, nextGap)
+		_ = w.rdb.XAck(ctx, w.stream, w.group, msg.ID).Err()
+	case SendTooManyRequests:
+		if retryAfter <= 0 {
+			retryAfter = 1
+		}
+		j.Attempts++
+		delayMs := int64(retryAfter) * 1000
+		nextRetry, blocked, _ := w.failure.ReportFailure(ctx, choose, j.ChatID, now)
+		if nextRetry > nowMs {
+			wait := nextRetry - nowMs
+			if wait > delayMs {
+				delayMs = wait
+			}
+		}
+		if delayMs < 1000 {
+			delayMs = 1000
+		}
+		score := nowMs + delayMs
+		body, _ := json.Marshal(j)
+		_ = w.rdb.ZAdd(ctx, zsetDelayed(w.chatID), redis.Z{Score: float64(score), Member: string(body)}).Err()
+		w.limiter.SetPerChatGap(ctx, choose, j.ChatID, score)
+		if blocked {
+			w.pruneCandidate(choose, now)
+		}
+		_ = w.rdb.XAck(ctx, w.stream, w.group, msg.ID).Err()
+	case SendRetryable:
+		j.Attempts++
+		delay := ComputeBackoff(j.Attempts)
+		delayMs := int64(delay / time.Millisecond)
+		if delayMs < 500 {
+			delayMs = 500
+		}
+		nextRetry, blocked, _ := w.failure.ReportFailure(ctx, choose, j.ChatID, now)
+		if nextRetry > nowMs {
+			wait := nextRetry - nowMs
+			if wait > delayMs {
+				delayMs = wait
+			}
+		}
+		score := nowMs + delayMs
+		body, _ := json.Marshal(j)
+		_ = w.rdb.ZAdd(ctx, zsetDelayed(w.chatID), redis.Z{Score: float64(score), Member: string(body)}).Err()
+		if blocked {
+			w.pruneCandidate(choose, now)
+		}
+		_ = w.rdb.XAck(ctx, w.stream, w.group, msg.ID).Err()
+	case SendFatal:
+		_, blocked, _ := w.failure.ReportFailure(ctx, choose, j.ChatID, now)
+		if blocked {
+			w.pruneCandidate(choose, now)
+		}
+		_ = w.rdb.XAck(ctx, w.stream, w.group, msg.ID).Err()
+	}
 }
 
-func (w *Worker) pushMsg(ctx context.Context, chatID int64, msg redis.XMessage) {
-    w.lanesMu.Lock()
-    l := w.lanes[chatID]
-    if l == nil {
-        l = &lane{}
-        w.lanes[chatID] = l
-    }
-    l.mu.Lock()
-    l.q = append(l.q, msg)
-    // 若该 lane 尚未运行且有并发余量，则立即启动
-    if !l.active && w.active < w.concurrency {
-        l.active = true
-        w.active++
-        w.wg.Add(1)
-        go w.processLane(ctx, chatID, l)
-        l.mu.Unlock()
-        w.lanesMu.Unlock()
-        return
-    }
-    // 否则加入等待队列（去重）
-    if !l.active && !l.inWait {
-        l.inWait = true
-        if _, ok := w.waitingSet[chatID]; !ok {
-            w.waitingSet[chatID] = struct{}{}
-            w.waiting = append(w.waiting, chatID)
-        }
-    }
-    l.mu.Unlock()
-    w.lanesMu.Unlock()
+func (w *Worker) getCandidates(ctx context.Context) []string {
+	if w.registry == nil {
+		return nil
+	}
+	now := time.Now()
+	if len(w.candidateCache) > 0 && now.Before(w.cacheExpiry) {
+		return w.candidateCache
+	}
+	return w.refreshCandidates(ctx, now)
 }
 
-func (w *Worker) processLane(ctx context.Context, chatID int64, l *lane) {
-    defer func() {
-        w.lanesMu.Lock()
-        w.active--
-        // 尝试从 waiting 启动下一个 lane
-        for len(w.waiting) > 0 && w.active < w.concurrency {
-            next := w.waiting[0]
-            w.waiting = w.waiting[1:]
-            delete(w.waitingSet, next)
-            nl := w.lanes[next]
-            if nl == nil {
-                continue
-            }
-            nl.mu.Lock()
-            if nl.active || len(nl.q) == 0 {
-                nl.inWait = false
-                nl.mu.Unlock()
-                continue
-            }
-            nl.inWait = false
-            nl.active = true
-            w.active++
-            w.wg.Add(1)
-            go w.processLane(ctx, next, nl)
-            nl.mu.Unlock()
-            break
-        }
-        // 清理空 lane，避免 map 膨胀
-        empty := false
-        l.mu.Lock()
-        empty = !l.active && len(l.q) == 0
-        l.mu.Unlock()
-        if empty {
-            delete(w.lanes, chatID)
-        }
-        w.lanesMu.Unlock()
-        w.wg.Done()
-    }()
-
-    for {
-        // 取出一条消息处理
-        l.mu.Lock()
-        if len(l.q) == 0 {
-            l.active = false
-            l.mu.Unlock()
-            return
-        }
-        msg := l.q[0]
-        l.q = l.q[1:]
-        l.mu.Unlock()
-
-        // 保序：同一 lane 内顺序处理
-        // 为了在关闭时也能可靠完成ACK与必要的Redis操作，这里使用每条消息一个短超时背景上下文
-        opCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-        w.handleOne(opCtx, w.stream, msg)
-        cancel()
-    }
+func (w *Worker) refreshCandidates(ctx context.Context, now time.Time) []string {
+	if w.registry == nil {
+		w.candidateCache = nil
+		w.cacheExpiry = now.Add(time.Hour)
+		return nil
+	}
+	ttl := time.Duration(w.cfg.CandidateCacheTTLMs) * time.Millisecond
+	if ttl <= 0 {
+		ttl = time.Hour
+	}
+	refreshOnEmpty := 5 * time.Minute
+	cands, err := w.registry.Candidates(ctx, w.chatID)
+	if err != nil {
+		if len(w.candidateCache) == 0 {
+			w.cacheExpiry = now.Add(refreshOnEmpty)
+			return nil
+		}
+		w.cacheExpiry = now.Add(refreshOnEmpty)
+		return w.candidateCache
+	}
+	if len(cands) == 0 {
+		w.candidateCache = nil
+		w.cacheExpiry = now.Add(refreshOnEmpty)
+		return nil
+	}
+	w.candidateCache = cands
+	w.cacheExpiry = now.Add(ttl)
+	return w.candidateCache
 }
 
-func (w *Worker) handleOne(ctx context.Context, stream string, msg redis.XMessage) {
-    // 解析字段
-    var j Job
-    j.ID = getString(msg.Values["id"])
-    j.Payload = getString(msg.Values["payload"]) 
-    j.Idem = getString(msg.Values["idem"]) 
-    j.Attempts = getInt(msg.Values["attempts"]) 
-    j.ChatID = getInt64(msg.Values["chat_id"]) 
-    // 候选bot
-    if s := getString(msg.Values["bot_candidates"]); s != "" {
-        _ = json.Unmarshal([]byte(s), &j.BotCandidates)
-    }
-    if len(j.BotCandidates) == 0 && w.registry != nil {
-        if cands, err := w.registry.Candidates(ctx, j.ChatID); err == nil { j.BotCandidates = cands }
-    }
-    now := time.Now()
-    // 动态选择可用bot：先按每群间隔与全局速率检查，选第一个可用的
-    choose := ""
-    var minWaitMs int64 = 1<<62
-    for _, b := range j.BotCandidates {
-        if ok, wait, _ := w.limiter.CheckPerChatGap(ctx, b, j.ChatID, now); !ok {
-            if wait < minWaitMs { minWaitMs = wait }
-            continue
-        }
-        if ok, wait, _ := w.limiter.TryAcquireGlobal(ctx, b, now); !ok {
-            if wait < minWaitMs { minWaitMs = wait }
-            continue
-        }
-        choose = b
-        break
-    }
-    // 若无可用bot，延时重投
-    if choose == "" {
-        // 当无候选或均不可用时，minWaitMs 可能未被更新，此时使用保底回退
-        if minWaitMs == 1<<62 || minWaitMs <= 0 { minWaitMs = 500 }
-        if minWaitMs < 100 { minWaitMs = 100 }
-        j.Attempts++
-        score := now.Add(time.Duration(minWaitMs) * time.Millisecond).UnixMilli()
-        b, _ := json.Marshal(j)
-        _ = w.rdb.ZAdd(ctx, zsetDelayed(w.shard), redis.Z{Score: float64(score), Member: string(b)}).Err()
-        _ = w.rdb.XAck(ctx, stream, consumerGroup(w.shard), msg.ID).Err()
-        return
-    }
-    // 发送
-    providerMsgID, status, retryAfter := w.tg.Send(ctx, choose, j.ChatID, j.Payload)
-    switch status {
-    case SendOK:
-        // 幂等标记
-        if j.Idem != "" {
-            _ = w.rdb.SetNX(ctx, keyIdem(j.Idem), providerMsgID, 24*time.Hour).Err()
-        }
-        // 每群间隔
-        w.limiter.SetPerChatGap(ctx, choose, j.ChatID, now.Add(time.Duration(w.cfg.PerChatMinGapMs)*time.Millisecond).UnixMilli())
-        _ = w.rdb.XAck(ctx, stream, consumerGroup(w.shard), msg.ID).Err()
-    case SendTooManyRequests:
-        // 429：按 retry_after 退避
-        if retryAfter <= 0 { retryAfter = 1 }
-        j.Attempts++
-        score := now.Add(time.Duration(retryAfter) * time.Second).UnixMilli()
-        b, _ := json.Marshal(j)
-        _ = w.rdb.ZAdd(ctx, zsetDelayed(w.shard), redis.Z{Score: float64(score), Member: string(b)}).Err()
-        // 也更新chat限流，避免短时间再选此chat
-        w.limiter.SetPerChatGap(ctx, choose, j.ChatID, now.Add(time.Duration(retryAfter)*time.Second).UnixMilli())
-        _ = w.rdb.XAck(ctx, stream, consumerGroup(w.shard), msg.ID).Err()
-    case SendRetryable:
-        j.Attempts++
-        delay := ComputeBackoff(j.Attempts)
-        score := now.Add(delay).UnixMilli()
-        b, _ := json.Marshal(j)
-        _ = w.rdb.ZAdd(ctx, zsetDelayed(w.shard), redis.Z{Score: float64(score), Member: string(b)}).Err()
-        _ = w.rdb.XAck(ctx, stream, consumerGroup(w.shard), msg.ID).Err()
-    case SendFatal:
-        // 记录失败后ACK（此处仅ACK）
-        _ = w.rdb.XAck(ctx, stream, consumerGroup(w.shard), msg.ID).Err()
-    }
+func (w *Worker) pruneCandidate(bot string, now time.Time) {
+	if len(w.candidateCache) == 0 {
+		return
+	}
+	filtered := w.candidateCache[:0]
+	for _, b := range w.candidateCache {
+		if b != bot {
+			filtered = append(filtered, b)
+		}
+	}
+	w.candidateCache = filtered
+	shorten := 5 * time.Minute
+	limit := now.Add(shorten)
+	if w.cacheExpiry.After(limit) {
+		w.cacheExpiry = limit
+	}
 }
 
 // 辅助解析
 func getString(v any) string {
-    switch x := v.(type) {
-    case string:
-        return x
-    case []byte:
-        return string(x)
-    default:
-        return ""
-    }
+	switch x := v.(type) {
+	case string:
+		return x
+	case []byte:
+		return string(x)
+	default:
+		return ""
+	}
 }
+
 func getInt(v any) int {
-    switch x := v.(type) {
-    case int:
-        return x
-    case int64:
-        return int(x)
-    case string:
-        var n int
-        _, _ = fmtSscanfInt(x, &n)
-        return n
-    default:
-        return 0
-    }
+	switch x := v.(type) {
+	case int:
+		return x
+	case int64:
+		return int(x)
+	case string:
+		var n int
+		_, _ = fmtSscanfInt(x, &n)
+		return n
+	default:
+		return 0
+	}
 }
+
 func getInt64(v any) int64 {
-    switch x := v.(type) {
-    case int64:
-        return x
-    case int:
-        return int64(x)
-    case string:
-        if n, err := strconv.ParseInt(x, 10, 64); err == nil { return n }
-        return 0
-    default:
-        return 0
-    }
+	switch x := v.(type) {
+	case int64:
+		return x
+	case int:
+		return int64(x)
+	case string:
+		if n, err := strconv.ParseInt(x, 10, 64); err == nil {
+			return n
+		}
+		return 0
+	default:
+		return 0
+	}
 }
 
 // 无依赖生成消费者名
@@ -324,16 +336,21 @@ func genConsumerName() string { return fmt.Sprintf("c-%d", time.Now().UnixNano()
 
 // fmt-free int parse helpers
 func fmtSscanfInt(s string, p *int) (n int, err error) {
-    var x int
-    sign := 1
-    i := 0
-    if i < len(s) && s[i] == '-' { sign = -1; i++ }
-    for ; i < len(s); i++ {
-        c := s[i]
-        if c < '0' || c > '9' { break }
-        x = x*10 + int(c-'0')
-        n++
-    }
-    *p = sign * x
-    return n, nil
+	var x int
+	sign := 1
+	i := 0
+	if i < len(s) && s[i] == '-' {
+		sign = -1
+		i++
+	}
+	for ; i < len(s); i++ {
+		c := s[i]
+		if c < '0' || c > '9' {
+			break
+		}
+		x = x*10 + int(c-'0')
+		n++
+	}
+	*p = sign * x
+	return n, nil
 }

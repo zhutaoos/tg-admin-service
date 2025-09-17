@@ -30,13 +30,15 @@ var InfrastructureModule = fx.Options(
 		// 队列与发送提供者
 		NewQueueConfig,
 		queue.NewLimiter,
+		queue.NewFailureTracker,
+		queue.NewRunnerManager,
 		queue.NewProducer,
 		telegram.NewClient,
 		botregistry.NewRegistry,
 		// 适配为 queue.Worker 所需接口类型
 		AsTelegramProvider,
 		AsBotRegistry,
-		// queue.NewWorker 不再通过 Provide 注入，改为在 Invoke 中按分片动态创建
+		// Worker 由 RunnerManager 在运行期按 chatID 动态创建
 		// Service层Provider
 		NewUserService,
 		NewAdminService,
@@ -51,7 +53,7 @@ var InfrastructureModule = fx.Options(
 	fx.Invoke(
 		job.NewBotMsgHandler, // 注册Bot消息处理器
 		job.NewTaskRestorer,  // 启动时恢复任务
-		// 启动多分片 Mover 与 Worker（按 groupID 分片）
+		// 启动队列 Runner 管理器（按 chatID 动态拉起 runner）
 		StartQueueRunners,
 	),
 )
