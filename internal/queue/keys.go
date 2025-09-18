@@ -11,9 +11,6 @@ func consumerGroup(chatID int64) string { return fmt.Sprintf("tg:send:cg:%d", ch
 func keyBotFixedWindow(bot string, sec int64) string {
 	return fmt.Sprintf("tg:lim:botcnt:%s:%d", bot, sec)
 }
-func keyChatNextAllowed(bot string, chatID int64) string {
-	return fmt.Sprintf("tg:lim:chat:%s:%d", bot, chatID)
-}
 func keyIdem(idem string) string { return fmt.Sprintf("tg:idem:%s", idem) }
 func keyFailureState(bot string, chatID int64) string {
 	return fmt.Sprintf("tg:fail:chat:%s:%d", bot, chatID)

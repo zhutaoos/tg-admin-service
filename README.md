@@ -75,14 +75,12 @@ go run main.go -mode=dev
 - `tg:send:delayed:<chatID>`：延迟任务集合
 - `tg:send:cg:<chatID>`：消费组
 - `tg:lim:botcnt:<bot>:<sec>`：单 bot 全局速率窗口
-- `tg:lim:chat:<bot>:<chatID>`：单 chat 发送间隔控制
 
 ### 队列配置项（[queue]）
 
 | 配置项 | 默认值 | 说明 |
 | --- | --- | --- |
-| `global_rate_per_sec` | 25 | 单 bot 每秒允许的发送次数，0 表示不发送 |
-| `per_chat_min_gap_ms` | 1000 | 同一 chat 连续两条消息的最小间隔（毫秒） |
+| `global_rate_per_sec` | 15 | 单 bot 每秒允许的发送次数，0 表示不发送 |
 | `mover_batch` | 200 | 每轮搬运的延迟任务数量上限 |
 | `mover_interval_ms` | 100 | 搬运器轮询间隔（毫秒） |
 | `horizon_sec` | 120 | 用于估算背压阈值的窗口（秒） |

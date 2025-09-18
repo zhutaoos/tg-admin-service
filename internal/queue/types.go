@@ -12,7 +12,6 @@ type Job struct {
 // Config 队列与限流配置
 type Config struct {
 	GlobalRatePerSec     int     // 每个Bot的默认全局速率（固定窗口简化版）
-	PerChatMinGapMs      int64   // 每群最小间隔ms
 	MoverBatch           int     // 搬运器每批处理数量
 	MoverIntervalMs      int     // 搬运器轮询间隔
 	HorizonSec           int     // 背压窗口
@@ -26,8 +25,7 @@ type Config struct {
 
 func DefaultConfig() *Config {
 	return &Config{
-		GlobalRatePerSec:    25,
-		PerChatMinGapMs:     1000,
+		GlobalRatePerSec:    15,
 		MoverBatch:          200,
 		MoverIntervalMs:     100,
 		HorizonSec:          120,

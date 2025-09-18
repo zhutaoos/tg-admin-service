@@ -134,12 +134,6 @@ func (w *Worker) handleOne(ctx context.Context, msg redis.XMessage) {
 			}
 			continue
 		}
-		if ok, wait, _ := w.limiter.CheckPerChatGap(ctx, bot, j.ChatID, now); !ok {
-			if wait > 0 && wait < minWaitMs {
-				minWaitMs = wait
-			}
-			continue
-		}
 		if ok, wait, _ := w.limiter.TryAcquireGlobal(ctx, bot, now); !ok {
 			if wait > 0 && wait < minWaitMs {
 				minWaitMs = wait
@@ -172,8 +166,6 @@ func (w *Worker) handleOne(ctx context.Context, msg redis.XMessage) {
 			_ = w.rdb.SetNX(ctx, keyIdem(j.Idem), providerMsgID, 24*time.Hour).Err()
 		}
 		w.failure.ReportSuccess(ctx, choose, j.ChatID)
-		nextGap := now.Add(time.Duration(w.cfg.PerChatMinGapMs) * time.Millisecond).UnixMilli()
-		w.limiter.SetPerChatGap(ctx, choose, j.ChatID, nextGap)
 		_ = w.rdb.XAck(ctx, w.stream, w.group, msg.ID).Err()
 	case SendTooManyRequests:
 		if retryAfter <= 0 {
@@ -194,7 +186,6 @@ func (w *Worker) handleOne(ctx context.Context, msg redis.XMessage) {
 		score := nowMs + delayMs
 		body, _ := json.Marshal(j)
 		_ = w.rdb.ZAdd(ctx, zsetDelayed(w.chatID), redis.Z{Score: float64(score), Member: string(body)}).Err()
-		w.limiter.SetPerChatGap(ctx, choose, j.ChatID, score)
 		if blocked {
 			w.pruneCandidate(choose, now)
 		}

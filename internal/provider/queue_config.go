@@ -15,9 +15,6 @@ func NewQueueConfig(conf *config.Config) *queue.Config {
 	if config.IsSet(conf, "queue", "global_rate_per_sec") {
 		cfg.GlobalRatePerSec = config.Get[int](conf, "queue", "global_rate_per_sec")
 	}
-	if config.IsSet(conf, "queue", "per_chat_min_gap_ms") {
-		cfg.PerChatMinGapMs = int64(config.Get[int](conf, "queue", "per_chat_min_gap_ms"))
-	}
 	if config.IsSet(conf, "queue", "mover_batch") {
 		cfg.MoverBatch = config.Get[int](conf, "queue", "mover_batch")
 	}
