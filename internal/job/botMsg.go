@@ -18,11 +18,11 @@ var (
 )
 
 type BotMsgPayload struct {
-	MessageIds []uint64 `json:"messageIds"`
-	GroupIds   []int64  `json:"groupIds"`
-	MsgType    string   `json:"msg_type"`
-	TaskID     uint64   `json:"taskId,omitempty"`
-	ExpireTime string   `json:"expireTime,omitempty"`
+	MessageId  uint    `json:"messageId"`
+	GroupIds   []int64 `json:"groupIds"`
+	MsgType    string  `json:"msg_type"`
+	TaskID     uint64  `json:"taskId,omitempty"`
+	ExpireTime string  `json:"expireTime,omitempty"`
 }
 
 type BotMsgHandler struct {
@@ -56,36 +56,34 @@ func (b *BotMsgHandler) Process(ctx context.Context, payload []byte) error {
 	}
 
 	now := time.Now()
-	// 按群×消息拆分作业（新设计，默认）
-	mids := botMsg.MessageIds
-	if len(mids) == 0 {
-		logger.System("BotMsgHandler 未获取到消息ID列表，跳过入队", "taskId", botMsg.TaskID)
+	// 按群拆分作业（每个群组一个消息）
+	mid := botMsg.MessageId
+	if mid == 0 {
+		logger.System("BotMsgHandler 未获取到消息ID，跳过入队", "taskId", botMsg.TaskID)
 		return nil
 	}
-	jobs := make([]queue.Job, 0, len(groupIDs)*len(mids))
+	jobs := make([]queue.Job, 0, len(groupIDs))
 	for _, gid := range groupIDs {
-		for _, mid := range mids {
-			idem := buildIdemMessage(botMsg.TaskID, gid, mid)
-			mp := map[string]any{
-				"taskId":    botMsg.TaskID,
-				"messageId": mid,
-			}
-			if botMsg.MsgType != "" {
-				mp["msgType"] = botMsg.MsgType
-			}
-			if botMsg.ExpireTime != "" {
-				mp["expireTime"] = botMsg.ExpireTime
-			}
-			bpayload, _ := json.Marshal(mp)
-			j := queue.Job{
-				ID:       fmt.Sprintf("%d-%d-%d-%d", botMsg.TaskID, gid, mid, now.UnixNano()),
-				ChatID:   gid,
-				Payload:  string(bpayload),
-				Idem:     idem,
-				Attempts: 0,
-			}
-			jobs = append(jobs, j)
+		idem := buildIdemMessage(botMsg.TaskID, gid, mid)
+		mp := map[string]any{
+			"taskId":    botMsg.TaskID,
+			"messageId": mid,
 		}
+		if botMsg.MsgType != "" {
+			mp["msgType"] = botMsg.MsgType
+		}
+		if botMsg.ExpireTime != "" {
+			mp["expireTime"] = botMsg.ExpireTime
+		}
+		bpayload, _ := json.Marshal(mp)
+		j := queue.Job{
+			ID:       fmt.Sprintf("%d-%d-%d-%d", botMsg.TaskID, gid, mid, now.UnixNano()),
+			ChatID:   gid,
+			Payload:  string(bpayload),
+			Idem:     idem,
+			Attempts: 0,
+		}
+		jobs = append(jobs, j)
 	}
 
 	if b.producer == nil {
@@ -100,7 +98,7 @@ func (b *BotMsgHandler) Process(ctx context.Context, payload []byte) error {
 	return nil
 }
 
-func buildIdemMessage(taskID uint64, chatID int64, messageID uint64) string {
+func buildIdemMessage(taskID uint64, chatID int64, messageID uint) string {
 	h := sha1.New()
 	h.Write([]byte(fmt.Sprintf("%d|%d|%d", taskID, chatID, messageID)))
 	return hex.EncodeToString(h.Sum(nil))

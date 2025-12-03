@@ -155,3 +155,44 @@ func (tc *TaskController) TaskList(ctx *gin.Context) {
 
 	(&resp.JsonResp{Code: resp.ReSuccess, Msg: "获取任务列表成功", Data: data}).Response()
 }
+
+// PauseTask 暂停任务
+func (tc *TaskController) PauseTask(ctx *gin.Context) {
+	var req request.PauseTaskRequest
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		(&resp.JsonResp{Code: resp.ReFail, Msg: "参数缺失或格式错误: " + err.Error()}).Response()
+		return
+	}
+
+	// 获取当前用户ID
+	adminID := uint(tc.CurrentUserId(ctx))
+
+	// 调用服务层暂停任务
+	if err := tc.TaskService.PauseTask(&req, adminID); err != nil {
+		(&resp.JsonResp{Code: resp.ReError, Msg: "暂停任务失败: " + err.Error()}).Response()
+		return
+	}
+
+	(&resp.JsonResp{Code: resp.ReSuccess, Msg: "暂停任务成功"}).Response()
+}
+
+// ResumeTask 恢复任务
+func (tc *TaskController) ResumeTask(ctx *gin.Context) {
+	var req request.ResumeTaskRequest
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		(&resp.JsonResp{Code: resp.ReFail, Msg: "参数缺失或格式错误: " + err.Error()}).Response()
+		return
+	}
+
+	// 获取当前用户ID
+	adminID := uint(tc.CurrentUserId(ctx))
+
+	// 调用服务层恢复任务
+	taskVO, err := tc.TaskService.ResumeTask(&req, adminID)
+	if err != nil {
+		(&resp.JsonResp{Code: resp.ReError, Msg: "恢复任务失败: " + err.Error()}).Response()
+		return
+	}
+
+	(&resp.JsonResp{Code: resp.ReSuccess, Msg: "恢复任务成功", Data: taskVO}).Response()
+}

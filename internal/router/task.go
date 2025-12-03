@@ -40,5 +40,11 @@ func (tr *TaskRoute) InitRoute(r *gin.Engine) {
 
 		// 任务列表
 		taskGroup.POST("/list", tr.TaskController.TaskList)
+
+		// 暂停任务
+		taskGroup.POST("/pause", tr.TaskController.PauseTask)
+
+		// 恢复任务
+		taskGroup.POST("/resume", tr.TaskController.ResumeTask)
 	}
 }

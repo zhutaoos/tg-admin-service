@@ -62,7 +62,7 @@ type TaskVo struct {
 	StatusText      string                  `json:"statusText"`
 	AdminID         uint                    `json:"adminId"`
 	GroupIDs        []int64                 `json:"groupIds"`
-	MessageID       uint64                  `json:"messageId"`
+	MessageID       uint                    `json:"messageId"`
 	TriggerType     model.TriggerType       `json:"triggerType"`
 	TriggerTypeText string                  `json:"triggerTypeText"`
     ScheduleTime    *CustomTime             `json:"scheduleTime"`
@@ -108,6 +108,8 @@ func (t *TaskVo) GetStatusText() string {
 		return "已完成"
 	case 3:
 		return "执行失败"
+	case 4:
+		return "已暂停"
 	default:
 		return "未知状态"
 	}

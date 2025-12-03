@@ -60,8 +60,7 @@ func restoreTasks(db *gorm.DB, js *JobService) error {
             exp = t.ExpireTime.In(time.Local).Format("2006-01-02 15:04:05")
         }
         gids := t.GroupIDs.Int64s()
-        mids := []uint64{t.MessageID}
-        payload, _ := CreateJSONPayload(BotMsgPayload{MsgType: "cron_restore", GroupIds: gids, MessageIds: mids, TaskID: t.ID, ExpireTime: exp})
+        payload, _ := CreateJSONPayload(BotMsgPayload{MsgType: "cron_restore", GroupIds: gids, MessageId: t.MessageID, TaskID: t.ID, ExpireTime: exp})
         if _, err := js.AddCronTask(cronExpr, BotMsgType, payload); err != nil {
             logger.Error("恢复注册cron任务失败", "error", err, "taskID", t.ID, "cron", cronExpr)
             continue
