@@ -62,7 +62,7 @@ type TaskVo struct {
 	StatusText      string                  `json:"statusText"`
 	AdminID         uint                    `json:"adminId"`
 	GroupIDs        []int64                 `json:"groupIds"`
-	MessageIDs      []uint64                `json:"messageIds"`
+	MessageID       uint64                  `json:"messageId"`
 	TriggerType     model.TriggerType       `json:"triggerType"`
 	TriggerTypeText string                  `json:"triggerTypeText"`
     ScheduleTime    *CustomTime             `json:"scheduleTime"`

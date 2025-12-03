@@ -145,11 +145,7 @@ func (t *TaskServiceImpl) CreateTask(req *request.CreateTaskRequest, adminID uin
 		task.MaxRetryCount = 3
 	}
 
-	messageIDsJSON, err := json.Marshal(req.MessageIDs)
-	if err != nil {
-		return nil, errors.New("消息ID序列化失败")
-	}
-	task.MessageIDs = model.JSON(messageIDsJSON)
+	task.MessageID = req.MessageID
 
 	if req.CronConfig != nil {
 		cronConfigJSON, err := json.Marshal(req.CronConfig)
@@ -231,11 +227,7 @@ func (t *TaskServiceImpl) UpdateTask(req *request.UpdateTaskRequest, adminID uin
 	}
 	updates["group_ids"] = model.JSON(groupIDsJSON)
 
-	messageIDsJSON, err := json.Marshal(req.MessageIDs)
-	if err != nil {
-		return nil, errors.New("消息ID序列化失败")
-	}
-	updates["message_ids"] = model.JSON(messageIDsJSON)
+	updates["message_id"] = req.MessageID
 
 	if req.CronConfig != nil {
 		cronConfigJSON, err := json.Marshal(req.CronConfig)
@@ -364,19 +356,7 @@ func (t *TaskServiceImpl) ListTasks(req *request.TaskListRequest, adminID uint) 
 		}
 	}
 	if len(req.MessageIDs) > 0 {
-		// 构建消息ID的OR条件，查询任务的message_ids字段中包含任意一个指定消息ID的记录
-		messageConditions := make([]string, 0, len(req.MessageIDs))
-		messageArgs := make([]interface{}, 0, len(req.MessageIDs))
-		for _, messageID := range req.MessageIDs {
-			messageConditions = append(messageConditions, "JSON_CONTAINS(message_ids, ?)")
-			// 将数值转换为JSON格式字符串
-			messageIDJSON, _ := json.Marshal(messageID)
-			messageArgs = append(messageArgs, string(messageIDJSON))
-		}
-		if len(messageConditions) > 0 {
-			messageQuery := "(" + strings.Join(messageConditions, " OR ") + ")"
-			query = query.Where(messageQuery, messageArgs...)
-		}
+		query = query.Where("message_id IN ?", req.MessageIDs)
 	}
 
 	// 获取总数
@@ -475,17 +455,13 @@ func (t *TaskServiceImpl) SubmitTask(req *request.SubmitTaskRequest, adminID uin
 		}
 	}
 
-	if err := t.db.Model(task).Updates(updates).Error; err != nil {
-		return nil, err
-	}
-
-	// 注册到asynq
+	// 先注册到asynq（确保队列注册成功后再更新数据库状态，避免数据不一致）
     var expireStr string
     if task.ExpireTime != nil {
         expireStr = task.ExpireTime.In(time.Local).Format("2006-01-02 15:04:05")
     }
     gids := task.GroupIDs.Int64s()
-    mids := task.MessageIDs.Uint64s()
+    mids := []uint64{task.MessageID}
     payload, _ := job.CreateJSONPayload(job.BotMsgPayload{
         MsgType:    "bot_msg",
         MessageIds: mids,
@@ -511,6 +487,11 @@ func (t *TaskServiceImpl) SubmitTask(req *request.SubmitTaskRequest, adminID uin
 		if _, err := t.jobService.AddCronTask(task.CronExpression, job.BotMsgType, payload, asynq.MaxRetry(task.MaxRetryCount)); err != nil {
 			return nil, fmt.Errorf("注册周期任务失败: %v", err)
 		}
+	}
+
+	// Asynq注册成功后再更新数据库状态
+	if err := t.db.Model(task).Updates(updates).Error; err != nil {
+		return nil, err
 	}
 
 	// 重新查询task
@@ -565,12 +546,7 @@ func (t *TaskServiceImpl) taskToVO(task *model.Task) *vo.TaskVo {
 		}
 	}
 
-	if len(task.MessageIDs) > 0 {
-		var messageIDs []uint64
-		if err := json.Unmarshal(task.MessageIDs, &messageIDs); err == nil {
-			taskVO.MessageIDs = messageIDs
-		}
-	}
+	taskVO.MessageID = task.MessageID
 
 	if len(task.CronConfig) > 0 {
 		var cronConfig map[string]interface{}

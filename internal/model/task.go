@@ -31,9 +31,9 @@ type Task struct {
 	TaskName        string           `json:"taskName" gorm:"type:VARCHAR(50) NOT NULL;comment:任务名称"`
 	Description     string           `json:"description" gorm:"type:TEXT;comment:任务描述"`
 	Status          int              `json:"status" gorm:"type:INT NOT NULL;default:0;comment:任务状态：-1-待提交，0-待执行，1-执行中，2-已完成，3-执行失败"`
-	AdminID         uint             `json:"adminId" gorm:"type:BIGINT NOT NULL;comment:创建者ID"`
+	AdminID         uint             `json:"adminId" gorm:"type:INT(11) UNSIGNED NOT NULL;comment:创建者ID"`
 	GroupIDs        JSON             `json:"groupIds" gorm:"type:JSON NOT NULL;comment:群组ID列表，JSON格式存储"`
-	MessageIDs      JSON             `json:"messageIds" gorm:"type:JSON NOT NULL;comment:消息ID列表，JSON格式存储"`
+	MessageID       uint64           `json:"messageId" gorm:"type:BIGINT UNSIGNED NOT NULL;comment:消息ID"`
 	TriggerType     TriggerType      `json:"triggerType" gorm:"type:ENUM('schedule','cron') NOT NULL;comment:触发类型：schedule-定时执行，cron-周期执行"`
 	ScheduleTime    *time.Time       `json:"scheduleTime" gorm:"type:DATETIME;comment:定时执行时间，当trigger_type=schedule时使用"`
 	ExpireTime      *time.Time       `json:"expireTime" gorm:"type:DATETIME;comment:任务到期日期"`

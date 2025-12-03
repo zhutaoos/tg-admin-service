@@ -31,9 +31,9 @@ func NewTaskRestorer(db *gorm.DB, js *JobService, lc fx.Lifecycle) {
 func restoreTasks(db *gorm.DB, js *JobService) error {
     logger.System("开始恢复未完成定时任务…", "time", time.Now().Format("2006-01-02 15:04:05"))
 
-    // 1) 恢复 cron 周期任务（只要表达式合法就尝试注册；避免重复注册）
+    // 1) 恢复 cron 周期任务（只恢复待执行和执行中状态的任务，避免误恢复待提交/已完成/失败的任务）
     var cronTasks []model.Task
-    if err := db.Where("trigger_type = ? AND cron_expression <> '' AND is_delete = 0", model.TriggerTypeCron).Find(&cronTasks).Error; err != nil {
+    if err := db.Where("trigger_type = ? AND cron_expression <> '' AND is_delete = 0 AND status IN (0, 1)", model.TriggerTypeCron).Find(&cronTasks).Error; err != nil {
         return fmt.Errorf("查询cron任务失败: %w", err)
     }
     restoredCron := 0
@@ -60,7 +60,7 @@ func restoreTasks(db *gorm.DB, js *JobService) error {
             exp = t.ExpireTime.In(time.Local).Format("2006-01-02 15:04:05")
         }
         gids := t.GroupIDs.Int64s()
-        mids := t.MessageIDs.Uint64s()
+        mids := []uint64{t.MessageID}
         payload, _ := CreateJSONPayload(BotMsgPayload{MsgType: "cron_restore", GroupIds: gids, MessageIds: mids, TaskID: t.ID, ExpireTime: exp})
         if _, err := js.AddCronTask(cronExpr, BotMsgType, payload); err != nil {
             logger.Error("恢复注册cron任务失败", "error", err, "taskID", t.ID, "cron", cronExpr)

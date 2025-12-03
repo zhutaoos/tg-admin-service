@@ -55,7 +55,7 @@ type CreateTaskRequest struct {
     TaskName        string                  `json:"taskName" binding:"required" validate:"required"`
     Description     string                  `json:"description"`
     GroupIDs        []int64                `json:"groupIds" binding:"required" validate:"required,min=1"`
-    MessageIDs      []uint64               `json:"messageIds" binding:"required" validate:"required,min=1"`
+    MessageID       uint64                 `json:"messageId" binding:"required" validate:"required"`
     TriggerType     model.TriggerType      `json:"triggerType" binding:"required" validate:"required,oneof=schedule cron"`
     ScheduleTime    *FlexibleTime          `json:"scheduleTime"`
     // 定时执行（schedule）不再要求到期时间；仅周期任务（cron）在服务层校验必填
@@ -88,7 +88,7 @@ type UpdateTaskRequest struct {
 	TaskName        string                 `json:"taskName" binding:"required" validate:"required"`
 	Description     string                 `json:"description"`
 	GroupIDs        []int64                `json:"groupIds" binding:"required" validate:"required,min=1"`
-	MessageIDs      []uint64               `json:"messageIds" binding:"required" validate:"required,min=1"`
+	MessageID       uint64                 `json:"messageId" binding:"required" validate:"required"`
 	TriggerType     model.TriggerType      `json:"triggerType" binding:"required" validate:"required,oneof=schedule cron"`
 	ScheduleTime    *FlexibleTime          `json:"scheduleTime"`
 	CronExpression  string                 `json:"cronExpression"`

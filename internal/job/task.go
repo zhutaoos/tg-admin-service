@@ -580,7 +580,6 @@ func (ts *JobService) updateTaskOnSuccess(taskID uint64) {
     now := time.Now()
     updates := map[string]interface{}{
         // 默认成功：一次性任务在分支中设为完成；周期任务保持执行中
-        "execute_count":    t.ExecuteCount + 1,
         "retry_count":      0,
         "error_message":    "",
         "last_executed_at": &now,
@@ -598,7 +597,10 @@ func (ts *JobService) updateTaskOnSuccess(taskID uint64) {
             updates["next_execute_at"] = next
         }
     }
-    _ = ts.db.Model(&model.Task{}).Where("id = ?", taskID).Updates(updates).Error
+    // 使用数据库原子操作更新 execute_count，避免并发问题
+    _ = ts.db.Model(&model.Task{}).Where("id = ?", taskID).
+        UpdateColumn("execute_count", gorm.Expr("execute_count + 1")).
+        Updates(updates).Error
 }
 
 func (ts *JobService) updateTaskOnFailure(taskID uint64, execErr error) {
@@ -610,10 +612,8 @@ func (ts *JobService) updateTaskOnFailure(taskID uint64, execErr error) {
         return
     }
     now := time.Now()
-    newRetry := t.RetryCount + 1
     updates := map[string]interface{}{
         "status":        3,
-        "retry_count":   newRetry,
         "error_message": fmt.Sprintf("%v", execErr),
         "last_executed_at": &now,
         "update_time":   now,
@@ -622,12 +622,15 @@ func (ts *JobService) updateTaskOnFailure(taskID uint64, execErr error) {
     if t.TriggerType == model.TriggerTypeSchedule {
         updates["next_execute_at"] = nil
     } else {
-        // 周期任务失败：按退避计算下一次执行时间
-        backoff := computeBackoff(newRetry)
+        // 周期任务失败：按退避计算下一次执行时间（使用当前重试次数+1）
+        backoff := computeBackoff(t.RetryCount + 1)
         next := now.Add(backoff)
         updates["next_execute_at"] = &next
     }
-    _ = ts.db.Model(&model.Task{}).Where("id = ?", taskID).Updates(updates).Error
+    // 使用数据库原子操作更新 retry_count，避免并发问题
+    _ = ts.db.Model(&model.Task{}).Where("id = ?", taskID).
+        UpdateColumn("retry_count", gorm.Expr("retry_count + 1")).
+        Updates(updates).Error
 }
 
 func computeBackoff(retry int) time.Duration {
