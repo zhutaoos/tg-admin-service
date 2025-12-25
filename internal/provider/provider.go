@@ -13,6 +13,7 @@ import (
 	botregistry "app/internal/provider/botregistry"
 	telegram "app/internal/provider/telegram"
 	"app/internal/queue"
+	"app/internal/service"
 
 	"go.uber.org/fx"
 )
@@ -40,15 +41,15 @@ var InfrastructureModule = fx.Options(
 		AsBotRegistry,
 		// Worker 由 RunnerManager 在运行期按 chatID 动态创建
 		// Service层Provider
-		NewUserService,
-		NewAdminService,
-		NewTokenService,
-		NewEvaluateService,
-		NewBotService,
-		NewGroupService,
-		NewMessageService,
-		NewFileService,
-		NewTaskService,
+		service.NewUserService,
+		service.NewAdminService,
+		service.NewTokenService,
+		service.NewEvaluateService,
+		service.NewBotService,
+		service.NewGroupService,
+		service.NewMessageService,
+		service.NewFileService,
+		service.NewTaskService,
 	),
 	fx.Invoke(
 		job.NewBotMsgHandler, // 注册Bot消息处理器

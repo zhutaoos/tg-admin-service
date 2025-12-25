@@ -12,7 +12,6 @@ import (
 
 // AdminController 管理员控制器
 type AdminController struct {
-	controller.BaseController
 	adminService service.AdminService
 }
 
@@ -65,6 +64,6 @@ func (ac *AdminController) InitPwd(ctx *gin.Context) {
 }
 
 func (ac *AdminController) Profile(ctx *gin.Context) {
-	user := ac.CurrentUser(ctx)
+	user := controller.CurrentUser(ctx)
 	resp.Ok(user)
 }

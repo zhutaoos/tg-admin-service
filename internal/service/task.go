@@ -220,6 +220,7 @@ func (t *TaskServiceImpl) UpdateTask(req *request.UpdateTaskRequest, adminID uin
 		"cron_pattern_type": req.CronPatternType,
 		"max_retry_count":   req.MaxRetryCount,
 		"update_time":       time.Now(),
+		"expire_time":       req.GetExpireTime(),
 	}
 
 	// 处理JSON字段

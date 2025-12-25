@@ -11,7 +11,6 @@ import (
 
 // GroupController 群组管理控制器
 type GroupController struct {
-	controller.BaseController
 	groupService service.GroupService
 }
 
@@ -29,7 +28,7 @@ func (c *GroupController) CreateGroup(ctx *gin.Context) {
 		return
 	}
 
-	currentUserId := c.CurrentUserId(ctx)
+	currentUserId := controller.CurrentUserId(ctx)
 	err := c.groupService.CreateGroup(ctx, req, currentUserId)
 	if err != nil {
 		(&resp.JsonResp{Code: resp.ReFail, Msg: "创建群组关联失败: " + err.Error()}).Response()
@@ -46,7 +45,7 @@ func (c *GroupController) UpdateGroup(ctx *gin.Context) {
 		return
 	}
 
-	currentUserId := c.CurrentUserId(ctx)
+	currentUserId := controller.CurrentUserId(ctx)
 	if err := c.groupService.UpdateGroup(ctx, req, currentUserId); err != nil {
 		(&resp.JsonResp{Code: resp.ReFail, Msg: "更新群组信息失败: " + err.Error()}).Response()
 		return
@@ -62,7 +61,7 @@ func (c *GroupController) DeleteGroup(ctx *gin.Context) {
 		return
 	}
 
-	currentUserId := c.CurrentUserId(ctx)
+	currentUserId := controller.CurrentUserId(ctx)
 
 	if err := c.groupService.DeleteGroup(ctx, req, currentUserId); err != nil {
 		(&resp.JsonResp{Code: resp.ReFail, Msg: "删除群组关联失败: " + err.Error()}).Response()
@@ -78,7 +77,7 @@ func (c *GroupController) SearchGroups(ctx *gin.Context) {
 		return
 	}
 
-	currentUserId := c.CurrentUserId(ctx)
+	currentUserId := controller.CurrentUserId(ctx)
 	groups, total, err := c.groupService.SearchGroups(ctx, req, currentUserId)
 	if err != nil {
 		(&resp.JsonResp{Code: resp.ReFail, Msg: "查询群组列表失败: " + err.Error()}).Response()
@@ -96,7 +95,7 @@ func (c *GroupController) SearchGroups(ctx *gin.Context) {
 }
 
 func (c *GroupController) GetMyGroups(ctx *gin.Context) {
-	currentUserId := c.CurrentUserId(ctx)
+	currentUserId := controller.CurrentUserId(ctx)
 
 	groups, err := c.groupService.GetGroupsByAdminID(ctx, int(currentUserId))
 	if err != nil {

@@ -27,8 +27,8 @@ type TokenServiceImpl struct {
 	db    *gorm.DB
 }
 
-// NewTokenLogic 创建TokenLogic实例
-func NewTokenLogic(redis *redis.Client, db *gorm.DB) TokenService {
+// NewTokenService 创建TokenService实例
+func NewTokenService(redis *redis.Client, db *gorm.DB) TokenService {
 	return &TokenServiceImpl{
 		redis: redis,
 		db:    db,

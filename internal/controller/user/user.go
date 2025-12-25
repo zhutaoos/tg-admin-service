@@ -10,13 +10,13 @@ import (
 
 // UserController 用户控制器
 type UserController struct {
-	service.UserService
+	userservice service.UserService
 }
 
 // NewUserController 创建用户控制器实例
 func NewUserController(userService service.UserService) *UserController {
 	return &UserController{
-		UserService: userService,
+		userservice: userService,
 	}
 }
 
@@ -27,7 +27,7 @@ func (uc *UserController) UserList(ctx *gin.Context) {
 	}
 
 	// 调用业务层获取用户列表
-	users, total, err := uc.ListUser(req)
+	users, total, err := uc.userservice.ListUser(req)
 	if err != nil {
 		(&resp.JsonResp{Code: resp.ReError, Msg: "查询用户列表失败: " + err.Error()}).Response()
 	}
@@ -50,7 +50,7 @@ func (uc *UserController) GetUserInfo(ctx *gin.Context) {
 		(&resp.JsonResp{Code: resp.ReFail, Msg: "用户ID不能为空"}).Response()
 	}
 
-	user, err := uc.LoadUser(userId)
+	user, err := uc.userservice.LoadUser(userId)
 	if err != nil {
 		(&resp.JsonResp{Code: resp.ReFail, Msg: "用户不存在"}).Response()
 	}

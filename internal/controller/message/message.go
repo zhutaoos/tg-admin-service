@@ -10,7 +10,6 @@ import (
 )
 
 type MessageController struct {
-	controller.BaseController
 	messageService *service.MessageService
 }
 
@@ -28,7 +27,7 @@ func (c *MessageController) CreateMessage(ctx *gin.Context) {
 		return
 	}
 	
-	currentUserId := c.CurrentUserId(ctx)
+	currentUserId := controller.CurrentUserId(ctx)
 	if currentUserId == 0 {
 		(&resp.JsonResp{Code: resp.ReFail, Msg: "用户未登录"}).Response()
 		return
@@ -51,7 +50,7 @@ func (c *MessageController) UpdateMessage(ctx *gin.Context) {
 		return
 	}
 	
-	currentUserId := c.CurrentUserId(ctx)
+	currentUserId := controller.CurrentUserId(ctx)
 	if currentUserId == 0 {
 		(&resp.JsonResp{Code: resp.ReFail, Msg: "用户未登录"}).Response()
 		return
@@ -74,7 +73,7 @@ func (c *MessageController) GetMessage(ctx *gin.Context) {
 		return
 	}
 	
-	currentUserId := c.CurrentUserId(ctx)
+	currentUserId := controller.CurrentUserId(ctx)
 	if currentUserId == 0 {
 		(&resp.JsonResp{Code: resp.ReFail, Msg: "用户未登录"}).Response()
 		return
@@ -97,7 +96,7 @@ func (c *MessageController) SearchMessages(ctx *gin.Context) {
 		return
 	}
 	
-	currentUserId := c.CurrentUserId(ctx)
+	currentUserId := controller.CurrentUserId(ctx)
 	if currentUserId == 0 {
 		(&resp.JsonResp{Code: resp.ReFail, Msg: "用户未登录"}).Response()
 		return
@@ -120,7 +119,7 @@ func (c *MessageController) DeleteMessage(ctx *gin.Context) {
 		return
 	}
 	
-	currentUserId := c.CurrentUserId(ctx)
+	currentUserId := controller.CurrentUserId(ctx)
 	if currentUserId == 0 {
 		(&resp.JsonResp{Code: resp.ReFail, Msg: "用户未登录"}).Response()
 		return

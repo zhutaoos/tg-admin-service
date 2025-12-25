@@ -84,13 +84,15 @@ func (req *CreateTaskRequest) GetExpireTime() *time.Time {
 
 // UpdateTaskRequest 更新任务请求
 type UpdateTaskRequest struct {
-	ID              uint64                 `json:"id" binding:"required" validate:"required"`
-	TaskName        string                 `json:"taskName" binding:"required" validate:"required"`
-	Description     string                 `json:"description"`
-	GroupIDs        []int64                `json:"groupIds" binding:"required" validate:"required,min=1"`
-	MessageID       uint                   `json:"messageId" binding:"required" validate:"required"`
-	TriggerType     model.TriggerType      `json:"triggerType" binding:"required" validate:"required,oneof=schedule cron"`
-	ScheduleTime    *FlexibleTime          `json:"scheduleTime"`
+	ID           uint64            `json:"id" binding:"required" validate:"required"`
+	TaskName     string            `json:"taskName" binding:"required" validate:"required"`
+	Description  string            `json:"description"`
+	GroupIDs     []int64           `json:"groupIds" binding:"required" validate:"required,min=1"`
+	MessageID    uint              `json:"messageId" binding:"required" validate:"required"`
+	TriggerType  model.TriggerType `json:"triggerType" binding:"required" validate:"required,oneof=schedule cron"`
+	ScheduleTime *FlexibleTime     `json:"scheduleTime"`
+	// 定时执行（schedule）不再要求到期时间；仅周期任务（cron）在服务层校验必填
+	ExpireTime      *FlexibleTime          `json:"expireTime"`
 	CronExpression  string                 `json:"cronExpression"`
 	CronPatternType *model.CronPatternType `json:"cronPatternType"`
 	CronConfig      map[string]interface{} `json:"cronConfig"`
@@ -103,6 +105,14 @@ func (req *UpdateTaskRequest) GetScheduleTime() *time.Time {
 		return nil
 	}
 	return &req.ScheduleTime.Time
+}
+
+// GetExpireTime 获取 time.Time 类型的到期时间
+func (req *UpdateTaskRequest) GetExpireTime() *time.Time {
+	if req.ExpireTime == nil {
+		return nil
+	}
+	return &req.ExpireTime.Time
 }
 
 // TaskListRequest 任务列表请求

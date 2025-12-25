@@ -10,7 +10,6 @@ import (
 )
 
 type BotController struct {
-	controller.BaseController
 	botService *service.BotService
 }
 
@@ -28,7 +27,7 @@ func (c *BotController) CreateBotConfig(ctx *gin.Context) {
 		(&resp.JsonResp{Code: resp.ReFail, Msg: "参数错误: " + err.Error()}).Response()
 		return
 	}
-	currentUserId := c.CurrentUserId(ctx)
+	currentUserId := controller.CurrentUserId(ctx)
 	err := c.botService.CreateBotConfig(ctx, req, currentUserId)
 	if err != nil {
 		(&resp.JsonResp{Code: resp.ReFail, Msg: "创建机器人配置失败: " + err.Error()}).Response()
@@ -50,7 +49,7 @@ func (c *BotController) UpdateBotConfig(ctx *gin.Context) {
 		return
 	}
 	
-	currentUserId := c.CurrentUserId(ctx)
+	currentUserId := controller.CurrentUserId(ctx)
 	err := c.botService.UpdateBotConfig(ctx, req, currentUserId)
 	if err != nil {
 		(&resp.JsonResp{Code: resp.ReFail, Msg: "更新机器人配置失败: " + err.Error()}).Response()
@@ -66,7 +65,7 @@ func (c *BotController) GetBotConfig(ctx *gin.Context) {
 		(&resp.JsonResp{Code: resp.ReFail, Msg: "参数错误: " + err.Error()}).Response()
 		return
 	}
-	currentUserId := c.CurrentUserId(ctx)
+	currentUserId := controller.CurrentUserId(ctx)
 
 	configData, err := c.botService.GetBotConfigData(ctx, req.Id, currentUserId)
 	if err != nil {
@@ -83,7 +82,7 @@ func (c *BotController) SearchBotConfig(ctx *gin.Context) {
 		(&resp.JsonResp{Code: resp.ReFail, Msg: "参数错误: " + err.Error()}).Response()
 		return
 	}
-	currentUserId := c.CurrentUserId(ctx)
+	currentUserId := controller.CurrentUserId(ctx)
 	configData, err := c.botService.SearchBotConfig(ctx, req, currentUserId)
 	if err != nil {
 		(&resp.JsonResp{Code: resp.ReFail, Msg: "获取机器人配置失败: " + err.Error()}).Response()
@@ -99,7 +98,7 @@ func (c *BotController) DelBotConfig(ctx *gin.Context) {
 		return
 	}
 
-	userId := c.CurrentUserId(ctx)
+	userId := controller.CurrentUserId(ctx)
 	err := c.botService.DeleteBotConfig(ctx, req.Id, userId)
 	if err != nil {
 		(&resp.JsonResp{Code: resp.ReFail}).Response()
