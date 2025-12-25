@@ -44,7 +44,7 @@ type JobService struct {
     db           *gorm.DB
 }
 
-func NewJobService(db *gorm.DB, redisConf *config.RedisConf, lc fx.Lifecycle) *JobService {
+func NewJobService(db *gorm.DB, redisConf *config.RedisConf) *JobService {
 	// 从配置中读取 Redis 信息
 	redisAddr := fmt.Sprintf("%s:%s", redisConf.Ip, redisConf.Port)
 
@@ -53,7 +53,7 @@ func NewJobService(db *gorm.DB, redisConf *config.RedisConf, lc fx.Lifecycle) *J
 		Concurrency: 10, // 默认并发数
 	}
 
-    ts := &JobService{
+    jobService := &JobService{
         handlers: make(map[string]JobHandler),
         config:   taskConfig,
         db:       db,
@@ -69,8 +69,8 @@ func NewJobService(db *gorm.DB, redisConf *config.RedisConf, lc fx.Lifecycle) *J
 	}
 
 	// 创建客户端并测试连接
-	ts.client = asynq.NewClient(redisOpt)
-	ts.redisConf = redisConf
+	jobService.client = asynq.NewClient(redisOpt)
+	jobService.redisConf = redisConf
 
 	// 初始化调度器，设置时区为上海时间
 	location, err := time.LoadLocation("Asia/Shanghai")
@@ -91,15 +91,19 @@ func NewJobService(db *gorm.DB, redisConf *config.RedisConf, lc fx.Lifecycle) *J
 	schedulerOpt := &asynq.SchedulerOpts{
 		Location: location,
 	}
-	ts.scheduler = asynq.NewScheduler(redisOpt, schedulerOpt)
+	jobService.scheduler = asynq.NewScheduler(redisOpt, schedulerOpt)
 
-	// FX 生命周期管理
+	return jobService
+}
+
+// RegisterJobServiceLifecycle 注册 JobService 生命周期钩子
+func RegisterJobServiceLifecycle(lc fx.Lifecycle, jobService *JobService) {
 	lc.Append(fx.Hook{
 		OnStart: func(ctx context.Context) error {
 			// 异步启动 Worker (避免阻塞)
 			go func() {
 				logger.System("正在启动 Worker...")
-				if err := ts.StartWorker(); err != nil {
+				if err := jobService.StartWorker(); err != nil {
 					logger.System("任务服务启动失败", "error", err)
 				}
 			}()
@@ -111,7 +115,7 @@ func NewJobService(db *gorm.DB, redisConf *config.RedisConf, lc fx.Lifecycle) *J
 			go func() {
 				logger.System("正在启动调度器...")
 
-				if err := ts.scheduler.Start(); err != nil {
+				if err := jobService.scheduler.Start(); err != nil {
 					logger.System("调度器启动失败", "error", err)
 				} else {
 					logger.System("调度器启动成功", "当前时间", time.Now().Format("2006-01-02 15:04:05"))
@@ -126,57 +130,55 @@ func NewJobService(db *gorm.DB, redisConf *config.RedisConf, lc fx.Lifecycle) *J
 			logger.System("任务服务停止中...")
 
 			// 先停止调度器，避免新任务入队
-			if ts.scheduler != nil {
-				ts.scheduler.Shutdown()
+			if jobService.scheduler != nil {
+				jobService.scheduler.Shutdown()
 				logger.System("调度器已停止")
 			}
 
 			// 再停止 Worker，处理完剩余任务
-			ts.Stop()
+			jobService.Stop()
 
 			logger.System("任务服务已完全停止")
 			return nil
 		},
 	})
-
-	return ts
 }
 
 // StartWorker 启动任务工作进程
-func (ts *JobService) StartWorker() error {
-	concurrency := ts.config.Concurrency
+func (jobService *JobService) StartWorker() error {
+	concurrency := jobService.config.Concurrency
 	if concurrency <= 0 {
 		concurrency = 10
 	}
 
 	// 从配置中读取 Redis 信息
-	redisAddr := fmt.Sprintf("%s:%s", ts.redisConf.Ip, ts.redisConf.Port)
+	redisAddr := fmt.Sprintf("%s:%s", jobService.redisConf.Ip, jobService.redisConf.Port)
 
 	redisOpt := asynq.RedisClientOpt{
 		Addr:     redisAddr,
-		Username: ts.redisConf.Username,
-		Password: ts.redisConf.Password,
-		DB:       ts.redisConf.Db,
-		PoolSize: ts.redisConf.MaxTotal,
+		Username: jobService.redisConf.Username,
+		Password: jobService.redisConf.Password,
+		DB:       jobService.redisConf.Db,
+		PoolSize: jobService.redisConf.MaxTotal,
 	}
 
-	ts.server = asynq.NewServer(redisOpt, asynq.Config{
+	jobService.server = asynq.NewServer(redisOpt, asynq.Config{
 		Concurrency: concurrency,
 	})
 
 	// 构建ServeMux并注册当前已知的任务类型
-	ts.mux = asynq.NewServeMux()
-	ts.handlersLock.RLock()
-	for taskType := range ts.handlers {
-		ts.mux.HandleFunc(taskType, ts.processTask)
+	jobService.mux = asynq.NewServeMux()
+	jobService.handlersLock.RLock()
+	for taskType := range jobService.handlers {
+		jobService.mux.HandleFunc(taskType, jobService.processTask)
 		logger.System("Worker注册任务类型", "taskType", taskType)
 	}
-	ts.handlersLock.RUnlock()
+	jobService.handlersLock.RUnlock()
 
 	logger.System("启动 asynq worker", "concurrency", concurrency, "redisAddr", redisAddr)
 
 	// 这是阻塞调用，会一直运行直到服务停止
-	err := ts.server.Start(ts.mux)
+	err := jobService.server.Start(jobService.mux)
 	if err != nil {
 		logger.System("asynq worker 启动失败", "error", err)
 		return err
@@ -185,22 +187,22 @@ func (ts *JobService) StartWorker() error {
 }
 
 // Stop 停止任务服务
-func (ts *JobService) Stop() {
-	if ts.server != nil {
-		ts.server.Stop()
-		ts.server.Shutdown()
+func (jobService *JobService) Stop() {
+	if jobService.server != nil {
+		jobService.server.Stop()
+		jobService.server.Shutdown()
 		logger.System("Asynq worker stopped")
 	}
-	if ts.client != nil {
-		ts.client.Close()
+	if jobService.client != nil {
+		jobService.client.Close()
 		logger.System("Asynq client closed")
 	}
 }
 
 // RegisterHandler 注册任务处理器
-func (ts *JobService) RegisterHandler(handler JobHandler) {
-	ts.handlersLock.Lock()
-	defer ts.handlersLock.Unlock()
+func (jobService *JobService) RegisterHandler(handler JobHandler) {
+	jobService.handlersLock.Lock()
+	defer jobService.handlersLock.Unlock()
 
 	if handler == nil {
 		panic("handler cannot be nil")
@@ -212,38 +214,38 @@ func (ts *JobService) RegisterHandler(handler JobHandler) {
 	}
 
 	// 检查是否重复注册
-	if _, exists := ts.handlers[taskType]; exists {
+	if _, exists := jobService.handlers[taskType]; exists {
 		logger.System("警告: 任务类型 %s 已经注册，将覆盖原有 Handler", taskType)
 	}
 
-	ts.handlers[taskType] = handler
+	jobService.handlers[taskType] = handler
 	logger.System("注册任务处理器成功", "taskType", taskType)
 
 	// 若Worker已创建mux，则动态注册到ServeMux
-	if ts.mux != nil {
-		ts.mux.HandleFunc(taskType, ts.processTask)
+	if jobService.mux != nil {
+		jobService.mux.HandleFunc(taskType, jobService.processTask)
 		logger.System("ServeMux已动态注册任务类型", "taskType", taskType)
 	}
 }
 
 // GetHandler 获取任务处理器
-func (ts *JobService) GetHandler(taskType string) (JobHandler, bool) {
-	ts.handlersLock.RLock()
-	defer ts.handlersLock.RUnlock()
+func (jobService *JobService) GetHandler(taskType string) (JobHandler, bool) {
+	jobService.handlersLock.RLock()
+	defer jobService.handlersLock.RUnlock()
 
-	handler, ok := ts.handlers[taskType]
+	handler, ok := jobService.handlers[taskType]
 	return handler, ok
 }
 
 // helper: new asynq Inspector with current redis config
-func (ts *JobService) newInspector() *asynq.Inspector {
-    redisAddr := fmt.Sprintf("%s:%s", ts.redisConf.Ip, ts.redisConf.Port)
+func (jobService *JobService) newInspector() *asynq.Inspector {
+    redisAddr := fmt.Sprintf("%s:%s", jobService.redisConf.Ip, jobService.redisConf.Port)
     redisOpt := asynq.RedisClientOpt{
         Addr:     redisAddr,
-        Username: ts.redisConf.Username,
-        Password: ts.redisConf.Password,
-        DB:       ts.redisConf.Db,
-        PoolSize: ts.redisConf.MaxTotal,
+        Username: jobService.redisConf.Username,
+        Password: jobService.redisConf.Password,
+        DB:       jobService.redisConf.Db,
+        PoolSize: jobService.redisConf.MaxTotal,
     }
     return asynq.NewInspector(redisOpt)
 }
@@ -252,8 +254,8 @@ func (ts *JobService) newInspector() *asynq.Inspector {
 // - pending/scheduled/retry/archived/completed: 直接删除
 // - active: 发送取消信号（最佳努力）
 // 返回删除数量与取消中的数量
-func (ts *JobService) PurgeQueuesByDBTaskID(dbTaskID uint64) (int, int, error) {
-    inspector := ts.newInspector()
+func (jobService *JobService) PurgeQueuesByDBTaskID(dbTaskID uint64) (int, int, error) {
+    inspector := jobService.newInspector()
     defer inspector.Close()
     if inspector == nil {
         return 0, 0, fmt.Errorf("inspector init failed")
@@ -345,8 +347,8 @@ func (ts *JobService) PurgeQueuesByDBTaskID(dbTaskID uint64) (int, int, error) {
 }
 
 // DeleteScheduledByDBTaskID 删除一次性定时任务（Scheduled队列）
-func (ts *JobService) DeleteScheduledByDBTaskID(dbTaskID uint64) error {
-    inspector := ts.newInspector()
+func (jobService *JobService) DeleteScheduledByDBTaskID(dbTaskID uint64) error {
+    inspector := jobService.newInspector()
     defer inspector.Close()
     // 优先按固定TaskID删除（新版本使用 TaskID("schedule:<id>")）
     taskID := fmt.Sprintf("schedule:%d", dbTaskID)
@@ -372,11 +374,11 @@ func (ts *JobService) DeleteScheduledByDBTaskID(dbTaskID uint64) error {
 }
 
 // UnregisterCronByTask 精确卸载与DB任务关联的cron条目
-func (ts *JobService) UnregisterCronByTask(cronExpr string, dbTaskID uint64) (int, error) {
-    if ts.scheduler == nil {
+func (jobService *JobService) UnregisterCronByTask(cronExpr string, dbTaskID uint64) (int, error) {
+    if jobService.scheduler == nil {
         return 0, fmt.Errorf("scheduler not initialized")
     }
-    inspector := ts.newInspector()
+    inspector := jobService.newInspector()
     defer inspector.Close()
     entries, err := inspector.SchedulerEntries()
     if err != nil {
@@ -398,7 +400,7 @@ func (ts *JobService) UnregisterCronByTask(cronExpr string, dbTaskID uint64) (in
                 matched = true
             }
             if matched {
-                if err := ts.scheduler.Unregister(e.ID); err != nil {
+                if err := jobService.scheduler.Unregister(e.ID); err != nil {
                     logger.Error("卸载cron条目失败", "error", err, "entryID", e.ID)
                 } else {
                     logger.System("已卸载cron条目", "entryID", e.ID, "spec", e.Spec)
@@ -414,11 +416,11 @@ func (ts *JobService) UnregisterCronByTask(cronExpr string, dbTaskID uint64) (in
 }
 
 // processTask 统一任务处理函数
-func (ts *JobService) processTask(ctx context.Context, task *asynq.Task) error {
+func (jobService *JobService) processTask(ctx context.Context, task *asynq.Task) error {
     taskType := task.Type()
     startTime := time.Now()
 
-    handler, ok := ts.GetHandler(taskType)
+    handler, ok := jobService.GetHandler(taskType)
     if !ok {
         logger.Error("没有找到任务处理器", "taskType", taskType)
         return fmt.Errorf("no handler registered for task type: %s", taskType)
@@ -437,9 +439,9 @@ func (ts *JobService) processTask(ctx context.Context, task *asynq.Task) error {
     if t, ok := parseExpireTimeFromPayload(payload); ok {
         expireAt = t
     }
-    if dbTaskID > 0 && ts.db != nil {
+    if dbTaskID > 0 && jobService.db != nil {
         // 读取任务类型与DB到期时间
-        if err := ts.db.Select("trigger_type", "expire_time", "cron_expression").Where("id = ? AND is_delete = 0", dbTaskID).First(&dbTask).Error; err == nil {
+        if err := jobService.db.Select("trigger_type", "expire_time", "cron_expression").Where("id = ? AND is_delete = 0", dbTaskID).First(&dbTask).Error; err == nil {
             // 仅周期任务需要强制过期检查；定时执行任务不需要到期日期
             requiresExpire = dbTask.TriggerType == model.TriggerTypeCron
             if expireAt == nil && dbTask.ExpireTime != nil {
@@ -451,16 +453,16 @@ func (ts *JobService) processTask(ctx context.Context, task *asynq.Task) error {
         // 仅在需要时（cron）进行过期校验
         if requiresExpire {
             if expireAt == nil {
-                ts.markExpiredAndCleanup(dbTaskID, "缺少ExpireTime")
+                jobService.markExpiredAndCleanup(dbTaskID, "缺少ExpireTime")
                 return nil
             }
             if !time.Now().Before(*expireAt) { // now >= expireAt
-                ts.markExpiredAndCleanup(dbTaskID, "任务已到期")
+                jobService.markExpiredAndCleanup(dbTaskID, "任务已到期")
                 return nil
             }
         }
         // 标记执行中
-        ts.updateTaskExecuting(dbTaskID)
+        jobService.updateTaskExecuting(dbTaskID)
     }
 
     err := handler.Process(ctx, payload)
@@ -468,13 +470,13 @@ func (ts *JobService) processTask(ctx context.Context, task *asynq.Task) error {
     if err != nil {
         logger.System("任务处理失败", "taskType", taskType, "error", err, "耗时", duration.String())
         if dbTaskID > 0 {
-            ts.updateTaskOnFailure(dbTaskID, err)
+            jobService.updateTaskOnFailure(dbTaskID, err)
         }
         return err
     }
     logger.System("任务处理成功", "taskType", taskType, "耗时", duration.String())
     if dbTaskID > 0 {
-        ts.updateTaskOnSuccess(dbTaskID)
+        jobService.updateTaskOnSuccess(dbTaskID)
     }
     return nil
 }
@@ -522,14 +524,14 @@ func parseExpireTimeFromPayload(payload []byte) (*time.Time, bool) {
 }
 
 // 标记任务为过期失败，并做清理（cron卸载）
-func (ts *JobService) markExpiredAndCleanup(taskID uint64, msg string) {
-    if ts.db == nil {
+func (jobService *JobService) markExpiredAndCleanup(taskID uint64, msg string) {
+    if jobService.db == nil {
         return
     }
     now := time.Now()
     // 先读取任务类型，以确定过期后的状态
     var t model.Task
-    _ = ts.db.Select("trigger_type", "cron_expression").Where("id = ? AND is_delete = 0", taskID).First(&t).Error
+    _ = jobService.db.Select("trigger_type", "cron_expression").Where("id = ? AND is_delete = 0", taskID).First(&t).Error
 
     updates := map[string]interface{}{
         "next_execute_at":  nil,
@@ -545,22 +547,22 @@ func (ts *JobService) markExpiredAndCleanup(taskID uint64, msg string) {
         updates["status"] = 3
         updates["error_message"] = msg
     }
-    _ = ts.db.Model(&model.Task{}).
+    _ = jobService.db.Model(&model.Task{}).
         Where("id = ? AND is_delete = 0", taskID).
         Updates(updates).Error
 
     // 周期任务到期需要卸载后续调度
     if t.TriggerType == model.TriggerTypeCron && t.CronExpression != "" {
-        _, _ = ts.UnregisterCronByTask(t.CronExpression, taskID)
+        _, _ = jobService.UnregisterCronByTask(t.CronExpression, taskID)
     }
 }
 
-func (ts *JobService) updateTaskExecuting(taskID uint64) {
-    if ts.db == nil {
+func (jobService *JobService) updateTaskExecuting(taskID uint64) {
+    if jobService.db == nil {
         return
     }
     now := time.Now()
-    _ = ts.db.Model(&model.Task{}).
+    _ = jobService.db.Model(&model.Task{}).
         Where("id = ? AND is_delete = 0", taskID).
         Updates(map[string]interface{}{
             "status":            1,
@@ -569,12 +571,12 @@ func (ts *JobService) updateTaskExecuting(taskID uint64) {
         }).Error
 }
 
-func (ts *JobService) updateTaskOnSuccess(taskID uint64) {
-    if ts.db == nil {
+func (jobService *JobService) updateTaskOnSuccess(taskID uint64) {
+    if jobService.db == nil {
         return
     }
     var t model.Task
-    if err := ts.db.Where("id = ? AND is_delete = 0", taskID).First(&t).Error; err != nil {
+    if err := jobService.db.Where("id = ? AND is_delete = 0", taskID).First(&t).Error; err != nil {
         return
     }
     now := time.Now()
@@ -598,17 +600,17 @@ func (ts *JobService) updateTaskOnSuccess(taskID uint64) {
         }
     }
     // 使用数据库原子操作更新 execute_count，避免并发问题
-    _ = ts.db.Model(&model.Task{}).Where("id = ?", taskID).
+    _ = jobService.db.Model(&model.Task{}).Where("id = ?", taskID).
         UpdateColumn("execute_count", gorm.Expr("execute_count + 1")).
         Updates(updates).Error
 }
 
-func (ts *JobService) updateTaskOnFailure(taskID uint64, execErr error) {
-    if ts.db == nil {
+func (jobService *JobService) updateTaskOnFailure(taskID uint64, execErr error) {
+    if jobService.db == nil {
         return
     }
     var t model.Task
-    if err := ts.db.Where("id = ? AND is_delete = 0", taskID).First(&t).Error; err != nil {
+    if err := jobService.db.Where("id = ? AND is_delete = 0", taskID).First(&t).Error; err != nil {
         return
     }
     now := time.Now()
@@ -628,7 +630,7 @@ func (ts *JobService) updateTaskOnFailure(taskID uint64, execErr error) {
         updates["next_execute_at"] = &next
     }
     // 使用数据库原子操作更新 retry_count，避免并发问题
-    _ = ts.db.Model(&model.Task{}).Where("id = ?", taskID).
+    _ = jobService.db.Model(&model.Task{}).Where("id = ?", taskID).
         UpdateColumn("retry_count", gorm.Expr("retry_count + 1")).
         Updates(updates).Error
 }
@@ -656,28 +658,28 @@ func computeBackoff(retry int) time.Duration {
 }
 
 // EnqueueTask 添加任务到队列
-func (ts *JobService) EnqueueTask(taskType string, payload string) (*asynq.TaskInfo, error) {
-	if ts.client == nil {
+func (jobService *JobService) EnqueueTask(taskType string, payload string) (*asynq.TaskInfo, error) {
+	if jobService.client == nil {
 		return nil, fmt.Errorf("client not initialized")
 	}
 
 	task := asynq.NewTask(taskType, []byte(payload))
-	return ts.client.Enqueue(task)
+	return jobService.client.Enqueue(task)
 }
 
 // ScheduleTask 计划任务
-func (ts *JobService) ScheduleTask(taskType string, payload string, processAt time.Time) (*asynq.TaskInfo, error) {
-    if ts.client == nil {
+func (jobService *JobService) ScheduleTask(taskType string, payload string, processAt time.Time) (*asynq.TaskInfo, error) {
+    if jobService.client == nil {
         return nil, fmt.Errorf("client not initialized")
     }
 
     task := asynq.NewTask(taskType, []byte(payload))
-    return ts.client.Enqueue(task, asynq.ProcessAt(processAt))
+    return jobService.client.Enqueue(task, asynq.ProcessAt(processAt))
 }
 
 // ScheduleTaskWithID 计划一次性任务并指定固定 TaskID（用于去重）
-func (ts *JobService) ScheduleTaskWithID(taskType string, payload string, processAt time.Time, taskID string, opts ...asynq.Option) (*asynq.TaskInfo, error) {
-    if ts.client == nil {
+func (jobService *JobService) ScheduleTaskWithID(taskType string, payload string, processAt time.Time, taskID string, opts ...asynq.Option) (*asynq.TaskInfo, error) {
+    if jobService.client == nil {
         return nil, fmt.Errorf("client not initialized")
     }
 
@@ -687,12 +689,12 @@ func (ts *JobService) ScheduleTaskWithID(taskType string, payload string, proces
         options = append(options, asynq.TaskID(taskID))
     }
     options = append(options, opts...)
-    return ts.client.Enqueue(task, options...)
+    return jobService.client.Enqueue(task, options...)
 }
 
 // AddCronTask 添加周期性任务
-func (ts *JobService) AddCronTask(cronExpr, taskType string, payload string, opts ...asynq.Option) (string, error) {
-	if ts.scheduler == nil {
+func (jobService *JobService) AddCronTask(cronExpr, taskType string, payload string, opts ...asynq.Option) (string, error) {
+	if jobService.scheduler == nil {
 		return "", fmt.Errorf("scheduler not initialized")
 	}
 
@@ -710,7 +712,7 @@ func (ts *JobService) AddCronTask(cronExpr, taskType string, payload string, opt
 	}
 
     task := asynq.NewTask(taskType, []byte(payload))
-    entryID, err := ts.scheduler.Register(cronExpr, task, opts...)
+    entryID, err := jobService.scheduler.Register(cronExpr, task, opts...)
 	if err != nil {
 		logger.System("注册周期任务失败", "error", err, "cronExpr", cronExpr, "taskType", taskType)
 		return "", fmt.Errorf("register periodic task failed: %w", err)
@@ -719,10 +721,10 @@ func (ts *JobService) AddCronTask(cronExpr, taskType string, payload string, opt
 	logger.System("注册周期任务成功", "cronExpr", cronExpr, "taskType", taskType, "entryID", entryID)
 
 	// 验证 Handler 是否已注册
-	if _, ok := ts.GetHandler(taskType); !ok {
+	if _, ok := jobService.GetHandler(taskType); !ok {
 		logger.System("错误: 任务类型 %s 没有对应的 Handler，cron 任务将无法执行", taskType)
 		// 移除刚注册的任务
-		ts.scheduler.Unregister(entryID)
+		jobService.scheduler.Unregister(entryID)
 		return "", fmt.Errorf("no handler registered for task type: %s", taskType)
 	}
 
@@ -730,12 +732,12 @@ func (ts *JobService) AddCronTask(cronExpr, taskType string, payload string, opt
 }
 
 // RemoveCronTask 移除周期性任务
-func (ts *JobService) RemoveCronTask(entryID string) error {
-	if ts.scheduler == nil {
+func (jobService *JobService) RemoveCronTask(entryID string) error {
+	if jobService.scheduler == nil {
 		return fmt.Errorf("scheduler not initialized")
 	}
 
-	err := ts.scheduler.Unregister(entryID)
+	err := jobService.scheduler.Unregister(entryID)
 	if err != nil {
 		return fmt.Errorf("unregister periodic task failed: %w", err)
 	}

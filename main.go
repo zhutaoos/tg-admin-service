@@ -56,7 +56,7 @@ func main() {
 
 		// 启动逻辑
 		fx.Invoke(runApplication),
-		fx.Invoke(initJobService),
+		fx.Invoke(job.RegisterJobServiceLifecycle),
 	)
 
 	// 启动应用
@@ -133,10 +133,4 @@ func runApplication(
 			return nil
 		},
 	})
-}
-
-// initJobService 初始化任务服务 - 触发TaskService的生命周期钩子
-func initJobService(jobService *job.JobService) {
-	// 这个函数的存在就是为了让FX知道TaskService被使用了
-	// 从而触发其生命周期钩子
 }
