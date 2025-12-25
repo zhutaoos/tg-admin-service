@@ -122,7 +122,7 @@ type TaskListRequest struct {
 	TaskName    string             `json:"taskName" form:"taskName"`
 	TriggerType *model.TriggerType `json:"triggerType" form:"triggerType"`
 	GroupIDs    []int64            `json:"groupIds" form:"groupIds"`
-	MessageID   *uint              `json:"messageId" form:"messageId"`
+	MessageIDs  []uint             `json:"messageIds" form:"messageIds"`
 }
 
 // DeleteTaskRequest 删除任务请求

@@ -358,8 +358,8 @@ func (t *TaskServiceImpl) ListTasks(req *request.TaskListRequest, adminID uint) 
 			query = query.Where(groupQuery, groupArgs...)
 		}
 	}
-	if req.MessageID != nil {
-		query = query.Where("message_id = ?", *req.MessageID)
+	if len(req.MessageIDs) > 0 {
+		query = query.Where("message_id IN ?", req.MessageIDs)
 	}
 
 	// 获取总数
